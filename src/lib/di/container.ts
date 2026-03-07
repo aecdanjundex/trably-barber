@@ -6,6 +6,10 @@ import { CustomerAuthRepository } from "@/domains/customer-auth/repositories/cus
 import { CustomerAuthService } from "@/domains/customer-auth/services/customer-auth.service";
 import type { ICustomerAuthRepository } from "@/domains/customer-auth/interfaces/customer-auth.repository.interface";
 import type { ICustomerAuthService } from "@/domains/customer-auth/interfaces/customer-auth.service.interface";
+import { AdminRepository } from "@/domains/admin/repositories/admin.repository";
+import { AdminService } from "@/domains/admin/services/admin.service";
+import type { IAdminRepository } from "@/domains/admin/interfaces/admin.repository.interface";
+import type { IAdminService } from "@/domains/admin/interfaces/admin.service.interface";
 
 const container = new Container();
 
@@ -19,6 +23,16 @@ container
 container
   .bind<ICustomerAuthService>(TYPES.CustomerAuthService)
   .to(CustomerAuthService)
+  .inSingletonScope();
+
+container
+  .bind<IAdminRepository>(TYPES.AdminRepository)
+  .to(AdminRepository)
+  .inSingletonScope();
+
+container
+  .bind<IAdminService>(TYPES.AdminService)
+  .to(AdminService)
   .inSingletonScope();
 
 export { container };

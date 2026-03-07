@@ -1,4 +1,11 @@
-import { boolean, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+} from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -143,4 +150,52 @@ export const customerSession = pgTable("customer_session", {
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").notNull(),
+});
+
+/**
+ * Services offered by a barbershop (e.g. haircut, beard trim).
+ * Each service belongs to a specific organization.
+ */
+export const service = pgTable("service", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  /** Duration in minutes */
+  durationMinutes: integer("duration_minutes").notNull(),
+  /** Price in cents (BRL) */
+  priceInCents: integer("price_in_cents").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+});
+
+/**
+ * Appointments / bookings made by customers.
+ */
+export const appointment = pgTable("appointment", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  customerId: text("customer_id")
+    .notNull()
+    .references(() => customer.id, { onDelete: "cascade" }),
+  /** The barber (member user) assigned to this appointment */
+  barberId: text("barber_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  serviceId: text("service_id")
+    .notNull()
+    .references(() => service.id, { onDelete: "cascade" }),
+  /** Scheduled start time */
+  startsAt: timestamp("starts_at").notNull(),
+  /** Scheduled end time */
+  endsAt: timestamp("ends_at").notNull(),
+  status: text("status").notNull().default("scheduled"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
 });
