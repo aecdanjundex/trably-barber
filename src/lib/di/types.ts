@@ -1,5 +1,5 @@
 export const TYPES = {
-  // Add your service identifiers here, e.g.:
-  // UserService: Symbol.for("UserService"),
-  // ProductRepository: Symbol.for("ProductRepository"),
+  Database: Symbol.for("Database"),
+  CustomerAuthRepository: Symbol.for("CustomerAuthRepository"),
+  CustomerAuthService: Symbol.for("CustomerAuthService"),
 } as const;

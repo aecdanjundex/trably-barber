@@ -122,6 +122,9 @@ All business logic lives in `src/domains/`, organized by bounded context. Each d
 ```
 src/domains/
 ├── user/
+│   ├── interfaces/
+│   │   ├── user.service.interface.ts
+│   │   └── user.repository.interface.ts
 │   ├── services/
 │   │   └── user.service.ts
 │   ├── repositories/
@@ -131,6 +134,9 @@ src/domains/
 │   └── types/
 │       └── index.ts
 ├── order/
+│   ├── interfaces/
+│   │   ├── order.service.interface.ts
+│   │   └── order.repository.interface.ts
 │   ├── services/
 │   │   └── order.service.ts
 │   ├── repositories/
@@ -140,6 +146,9 @@ src/domains/
 │   └── types/
 │       └── index.ts
 └── payment/
+    ├── interfaces/
+    │   ├── payment.service.interface.ts
+    │   └── payment.repository.interface.ts
     ├── services/
     │   └── payment.service.ts
     ├── repositories/
@@ -152,10 +161,115 @@ src/domains/
 
 ### What goes where
 
-- **services/**: Business rules and orchestration. A service may call its own repository and, when necessary, other domain services. Services should never import from `src/app/` or any UI code. Example: `createOrder()`, `calculateShipping()`.
-- **repositories/**: Data access. Wraps Drizzle queries for the domain's tables. Only the domain's own service should import its repository. Example: `findUserByEmail()`, `insertOrder()`.
+- **interfaces/**: TypeScript interfaces for each service and repository in the domain. Every service and repository must have a corresponding interface defined here, named with the `I` prefix (e.g., `IOrderService`, `IOrderRepository`). The DI container binds to these interfaces — callers depend on the interface, not the concrete class. Interface files follow the naming convention `[domain].[role].interface.ts`.
+- **services/**: Business rules and orchestration. A service may call its own repository and, when necessary, other domain services. Services should never import from `src/app/` or any UI code. Each service class implements its corresponding interface from `interfaces/`. Example: `createOrder()`, `calculateShipping()`.
+- **repositories/**: Data access. Wraps Drizzle queries for the domain's tables. Only the domain's own service should import its repository. Each repository class implements its corresponding interface from `interfaces/`. Example: `findUserByEmail()`, `insertOrder()`.
 - **schemas/**: Zod schemas for input validation. Used by tRPC routers and services to validate data at the boundary. Example: `createUserSchema`, `updateOrderSchema`.
-- **types/**: TypeScript interfaces and types for the domain. Inferred types from Zod schemas also live here if they need to be exported. Example: `User`, `Order`, `CreateUserInput`.
+- **types/**: TypeScript types for the domain. Inferred types from Zod schemas also live here if they need to be exported. Example: `User`, `Order`, `CreateUserInput`.
+
+### Services and repositories are classes wired through InversifyJS DI
+
+Services and repositories are always implemented as **classes** decorated with `@injectable()`. Dependencies (database, other services/repositories) are injected via the constructor using `@inject()`. **Never import `db` directly inside a repository** — always receive it as a constructor parameter.
+
+Every class must be:
+1. Decorated with `@injectable()`
+2. Registered in `src/lib/di/container.ts` (use `.inSingletonScope()` for services and repositories)
+3. Identified by a symbol in `src/lib/di/types.ts`
+
+Callers (tRPC routers) resolve instances via `container.get<T>(TYPES.X)` — they never instantiate classes directly.
+
+**Interface (repository):**
+```ts
+// src/domains/order/interfaces/order.repository.interface.ts
+import type { Order } from "../types";
+
+interface IOrderRepository {
+  findById(id: string): Promise<Order | undefined>;
+}
+
+export type { IOrderRepository };
+```
+
+**Interface (service):**
+```ts
+// src/domains/order/interfaces/order.service.interface.ts
+import type { CreateOrderInput, Order } from "../types";
+
+interface IOrderService {
+  create(input: CreateOrderInput): Promise<Order>;
+}
+
+export type { IOrderService };
+```
+
+**Repository:**
+```ts
+// src/domains/order/repositories/order.repository.ts
+import { inject, injectable } from "inversify";
+import type { Database } from "@/lib/db";
+import { TYPES } from "@/lib/di/types";
+import type { IOrderRepository } from "../interfaces/order.repository.interface";
+
+@injectable()
+class OrderRepository implements IOrderRepository {
+  constructor(
+    @inject(TYPES.Database) private readonly db: Database,
+  ) {}
+
+  findById(id: string) { return this.db.select()... }
+}
+
+export { OrderRepository };
+```
+
+**Service:**
+```ts
+// src/domains/order/services/order.service.ts
+import { inject, injectable } from "inversify";
+import { TYPES } from "@/lib/di/types";
+import type { IOrderRepository } from "../interfaces/order.repository.interface";
+import type { IOrderService } from "../interfaces/order.service.interface";
+
+@injectable()
+class OrderService implements IOrderService {
+  constructor(
+    @inject(TYPES.OrderRepository) private readonly repository: IOrderRepository,
+  ) {}
+
+  async create(input: CreateOrderInput) { ... }
+}
+
+export { OrderService };
+```
+
+**Registration (`src/lib/di/container.ts`):**
+```ts
+import { db, type Database } from "@/lib/db";
+import type { IOrderRepository } from "@/domains/order/interfaces/order.repository.interface";
+import type { IOrderService } from "@/domains/order/interfaces/order.service.interface";
+
+// db is a constant value — bound once, injected everywhere
+container.bind<Database>(TYPES.Database).toConstantValue(db);
+
+// Bind to the interface type — callers depend on the interface, not the concrete class
+container.bind<IOrderRepository>(TYPES.OrderRepository).to(OrderRepository).inSingletonScope();
+container.bind<IOrderService>(TYPES.OrderService).to(OrderService).inSingletonScope();
+```
+
+**tRPC router resolves from container:**
+```ts
+import { container } from "@/lib/di/container";
+import { TYPES } from "@/lib/di/types";
+import type { IOrderService } from "@/domains/order/interfaces/order.service.interface";
+
+export const orderRouter = createTRPCRouter({
+  create: protectedProcedure
+    .input(createOrderSchema)
+    .mutation(({ input }) =>
+      container.get<IOrderService>(TYPES.OrderService).create(input),
+    ),
+});
+```
 
 ### Cross-domain communication
 

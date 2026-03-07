@@ -16,6 +16,16 @@ export const auth = betterAuth({
     admin({
       defaultRole: "user",
     }),
-    organization(),
+    organization({
+      /**
+       * Member roles inside an organization (barbearia):
+       *   owner  — created automatically for the org creator; full control
+       *   admin  — manages barbers, schedule, settings
+       *   barber — can view/manage their own agenda
+       *
+       * Customers are NOT Better Auth users — they live in the `customer` table.
+       */
+      memberRoles: ["owner", "admin", "barber"],
+    }),
   ],
 });
