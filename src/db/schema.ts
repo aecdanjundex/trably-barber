@@ -69,6 +69,7 @@ export const organization = pgTable("organization", {
   logo: text("logo"),
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
+  plan: text("plan").notNull().default("free"),
 });
 
 export const member = pgTable("member", {
@@ -95,6 +96,7 @@ export const invitation = pgTable("invitation", {
   inviterId: text("inviter_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 // ─── Application domain ──────────────────────────────────────────────────────

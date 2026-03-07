@@ -140,16 +140,12 @@ export default function AdminLoginPage() {
               </Button>
               <p className="text-center text-sm text-muted-foreground">
                 Não tem conta?{" "}
-                <button
-                  type="button"
+                <a
+                  href="/cadastro"
                   className="font-medium text-primary underline-offset-4 hover:underline"
-                  onClick={() => {
-                    setMode("signup");
-                    setError(null);
-                  }}
                 >
-                  Criar conta
-                </button>
+                  Cadastrar barbearia
+                </a>
               </p>
             </form>
           ) : (

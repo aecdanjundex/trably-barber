@@ -9,6 +9,9 @@ import {
   UserCircle,
   LogOut,
   Menu,
+  Link2,
+  Check,
+  Copy,
 } from "lucide-react";
 import {
   Sidebar,
@@ -24,8 +27,11 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { useSession, signOut } from "@/lib/auth-client";
+import { useSession, signOut, authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
+import { clientEnv } from "@/lib/env/client";
+import { useState } from "react";
 
 const navItems = [
   { title: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -93,14 +99,70 @@ export function AdminLayoutShell({ children }: { children: React.ReactNode }) {
     <SidebarProvider>
       <AdminSidebar />
       <main className="flex-1 overflow-auto">
-        <div className="flex items-center gap-2 border-b px-4 py-3 md:hidden">
-          <SidebarTrigger>
-            <Menu className="h-5 w-5" />
-          </SidebarTrigger>
-          <span className="font-semibold">Trably Barber</span>
-        </div>
+        <AdminTopNav />
         <div className="p-6">{children}</div>
       </main>
     </SidebarProvider>
+  );
+}
+
+function AdminTopNav() {
+  const { data: org } = useQuery({
+    queryKey: ["active-organization"],
+    queryFn: async () => {
+      const result = await authClient.organization.getFullOrganization();
+      return result.data;
+    },
+  });
+
+  const [copied, setCopied] = useState(false);
+
+  const bookingUrl = org?.slug
+    ? (() => {
+        const url = new URL(clientEnv.NEXT_PUBLIC_APP_URL);
+        return `${url.protocol}//${org.slug}.${url.host}`;
+      })()
+    : null;
+
+  function handleCopy() {
+    if (!bookingUrl) return;
+    navigator.clipboard.writeText(bookingUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div className="flex items-center justify-between border-b px-4 py-3">
+      <div className="flex items-center gap-2">
+        <SidebarTrigger className="md:hidden">
+          <Menu className="h-5 w-5" />
+        </SidebarTrigger>
+        {org ? (
+          <span className="text-sm font-semibold">{org.name}</span>
+        ) : (
+          <span className="text-sm font-semibold text-muted-foreground">
+            Carregando…
+          </span>
+        )}
+      </div>
+
+      {bookingUrl && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2 text-xs"
+          onClick={handleCopy}
+        >
+          {copied ? (
+            <Check className="h-3.5 w-3.5 text-green-500" />
+          ) : (
+            <Link2 className="h-3.5 w-3.5" />
+          )}
+          <span className="hidden sm:inline">{bookingUrl}</span>
+          <span className="sm:hidden">Copiar link</span>
+          {!copied && <Copy className="h-3 w-3 text-muted-foreground" />}
+        </Button>
+      )}
+    </div>
   );
 }

@@ -66,7 +66,8 @@ export default function EquipePage() {
     mutationFn: async (data: InviteFormData) => {
       const result = await authClient.organization.inviteMember({
         email: data.email,
-        role: data.role as "admin" | "member",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        role: data.role as any,
       });
       if (result.error) throw new Error(result.error.message);
       return result.data;

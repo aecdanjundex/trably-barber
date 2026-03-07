@@ -34,8 +34,8 @@ export function AdminAuthGuard({ children }: { children: React.ReactNode }) {
               .setActive({ organizationId: orgs[0].id })
               .then(() => setOrgReady(true));
           } else {
-            // No organization — still allow access (they can create one later)
-            setOrgReady(true);
+            // No organization — redirect to registration
+            router.replace("/cadastro");
           }
         })
         .catch(() => setOrgReady(true));

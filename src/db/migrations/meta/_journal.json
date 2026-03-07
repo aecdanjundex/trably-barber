@@ -22,6 +22,20 @@
       "when": 1772907057940,
       "tag": "0002_jazzy_robin_chapel",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1772917153841,
+      "tag": "0003_parched_colossus",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1772918394596,
+      "tag": "0004_nervous_millenium_guard",
+      "breakpoints": true
     }
   ]
 }
