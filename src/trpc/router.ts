@@ -7,6 +7,7 @@ import {
   createTRPCRouter,
 } from "./init";
 import { customerAuthRouter } from "./routers/customer-auth";
+import { customerBookingRouter } from "./routers/customer-booking";
 
 export const appRouter = createTRPCRouter({
   hello: publicProcedure.query(async () => {
@@ -19,6 +20,7 @@ export const appRouter = createTRPCRouter({
     return { message: `Admin access granted for ${ctx.user.name}` };
   }),
   customerAuth: customerAuthRouter,
+  customerBooking: customerBookingRouter,
 });
 
 export type AppRouter = typeof appRouter;

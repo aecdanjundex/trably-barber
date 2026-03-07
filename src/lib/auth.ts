@@ -24,8 +24,8 @@ export const auth = betterAuth({
        *   barber — can view/manage their own agenda
        *
        * Customers are NOT Better Auth users — they live in the `customer` table.
+       * Custom roles (admin, barber) are stored in the `member.role` column.
        */
-      memberRoles: ["owner", "admin", "barber"],
     }),
   ],
 });
