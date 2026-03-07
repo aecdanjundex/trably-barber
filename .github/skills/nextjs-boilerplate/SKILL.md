@@ -187,9 +187,9 @@ Also create `.env.example` with the same keys but placeholder values.
 
 ## Step 10 — Create environment validation
 
-Centralized validation with Zod. Todo código server-side importa de `@/env/server` e código client-side de `@/env/client`, eliminando `process.env` direto no restante do projeto.
+Centralized validation with Zod. Todo código server-side importa de `@/lib/env/server` e código client-side de `@/lib/env/client`, eliminando `process.env` direto no restante do projeto.
 
-### `src/env/server.ts`
+### `src/lib/env/server.ts`
 
 ```ts
 import "server-only";
@@ -217,7 +217,7 @@ if (!parsed.success) {
 export const env = parsed.data;
 ```
 
-### `src/env/client.ts`
+### `src/lib/env/client.ts`
 
 ```ts
 import { z } from "zod";
@@ -382,7 +382,7 @@ export const invitation = pgTable("invitation", {
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "@/db/schema";
-import { env } from "@/env/server";
+import { env } from "@/lib/env/server";
 
 const client = postgres(env.DATABASE_URL);
 
@@ -454,7 +454,7 @@ export const auth = betterAuth({
 ```ts
 import { createAuthClient } from "better-auth/react";
 import { adminClient, organizationClient } from "better-auth/client/plugins";
-import { clientEnv } from "@/env/client";
+import { clientEnv } from "@/lib/env/client";
 
 export const authClient = createAuthClient({
   baseURL: clientEnv.NEXT_PUBLIC_APP_URL,
@@ -670,7 +670,7 @@ import { TRPCProvider } from "./utils";
 import type { AppRouter } from "./router";
 import superjson from "superjson";
 import { makeQueryClient } from "./query-client";
-import { clientEnv } from "@/env/client";
+import { clientEnv } from "@/lib/env/client";
 
 function getBaseUrl() {
   if (typeof window !== "undefined") return "";

@@ -7,7 +7,7 @@ import { TRPCProvider } from "./utils";
 import type { AppRouter } from "./router";
 import superjson from "superjson";
 import { makeQueryClient } from "./query-client";
-import { clientEnv } from "@/env/client";
+import { clientEnv } from "@/lib/env/client";
 
 function getBaseUrl() {
   if (typeof window !== "undefined") return "";
