@@ -14,6 +14,11 @@ import {
   Check,
   Copy,
   Clock,
+  ClipboardList,
+  Package,
+  CreditCard,
+  Percent,
+  Zap,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -46,7 +51,12 @@ const ROLE_LABELS: Record<string, string> = {
 
 const navItems = [
   { title: "Dashboard", href: "/admin", icon: LayoutDashboard },
+  { title: "Ordens de Serviço", href: "/admin/ordens", icon: ClipboardList },
   { title: "Serviços", href: "/admin/servicos", icon: Scissors },
+  { title: "Produtos", href: "/admin/produtos", icon: Package },
+  { title: "Formas de Pagamento", href: "/admin/formas-pagamento", icon: CreditCard },
+  { title: "Comissões", href: "/admin/comissoes", icon: Percent },
+  { title: "Itens Rápidos", href: "/admin/itens-rapidos", icon: Zap },
   { title: "Equipe", href: "/admin/equipe", icon: Users },
   { title: "Agenda", href: "/admin/agenda", icon: Clock },
   { title: "Agendamentos", href: "/admin/agendamentos", icon: CalendarDays },

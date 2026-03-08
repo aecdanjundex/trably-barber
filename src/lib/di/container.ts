@@ -14,6 +14,10 @@ import { SchedulingRepository } from "@/domains/scheduling/repositories/scheduli
 import { SchedulingService } from "@/domains/scheduling/services/scheduling.service";
 import type { ISchedulingRepository } from "@/domains/scheduling/interfaces/scheduling.repository.interface";
 import type { ISchedulingService } from "@/domains/scheduling/interfaces/scheduling.service.interface";
+import { ServiceOrderRepository } from "@/domains/service-order/repositories/service-order.repository";
+import { ServiceOrderService } from "@/domains/service-order/services/service-order.service";
+import type { IServiceOrderRepository } from "@/domains/service-order/interfaces/service-order.repository.interface";
+import type { IServiceOrderService } from "@/domains/service-order/interfaces/service-order.service.interface";
 
 const container = new Container();
 
@@ -47,6 +51,16 @@ container
 container
   .bind<ISchedulingService>(TYPES.SchedulingService)
   .to(SchedulingService)
+  .inSingletonScope();
+
+container
+  .bind<IServiceOrderRepository>(TYPES.ServiceOrderRepository)
+  .to(ServiceOrderRepository)
+  .inSingletonScope();
+
+container
+  .bind<IServiceOrderService>(TYPES.ServiceOrderService)
+  .to(ServiceOrderService)
   .inSingletonScope();
 
 export { container };

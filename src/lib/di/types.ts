@@ -6,4 +6,6 @@ export const TYPES = {
   AdminService: Symbol.for("AdminService"),
   SchedulingRepository: Symbol.for("SchedulingRepository"),
   SchedulingService: Symbol.for("SchedulingService"),
+  ServiceOrderRepository: Symbol.for("ServiceOrderRepository"),
+  ServiceOrderService: Symbol.for("ServiceOrderService"),
 } as const;

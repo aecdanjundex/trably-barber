@@ -287,3 +287,209 @@ export const customerBlock = pgTable(
     index("customer_block_barber_customer_idx").on(t.barberId, t.customerId),
   ],
 );
+
+// ─── Service Order domain ────────────────────────────────────────────────────
+
+/**
+ * Products offered by the barbershop (e.g. hair gel, shampoo).
+ */
+export const product = pgTable("product", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  /** Price in cents (BRL) */
+  priceInCents: integer("price_in_cents").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+});
+
+/**
+ * Payment methods registered per organization (e.g. Espécie, Cartão de Crédito, Débito, Pix).
+ */
+export const paymentMethod = pgTable("payment_method", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+});
+
+/**
+ * Commission rules per professional per service/product.
+ * Defines how much a barber earns for a specific service or product.
+ * The commission can be a fixed value (in cents) or a percentage.
+ */
+export const commissionConfig = pgTable(
+  "commission_config",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    /** The professional (member/barber) */
+    professionalId: text("professional_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** "service" | "product" */
+    referenceType: text("reference_type").notNull(),
+    /** ID of the service or product */
+    referenceId: text("reference_id").notNull(),
+    /** "fixed" | "percentage" */
+    commissionType: text("commission_type").notNull(),
+    /** Fixed value in cents (when type = "fixed") */
+    fixedValueInCents: integer("fixed_value_in_cents"),
+    /** Percentage value, stored as integer (e.g. 10 = 10%, 1050 = 10.50% when using basis points).
+     *  We store as percentage * 100 (basis points) for precision: 1000 = 10.00% */
+    percentageValue: integer("percentage_value"),
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (t) => [
+    unique("commission_config_professional_ref_unique").on(
+      t.professionalId,
+      t.referenceType,
+      t.referenceId,
+    ),
+    index("commission_config_org_idx").on(t.organizationId),
+  ],
+);
+
+/**
+ * Service orders — the main invoice/order for a client visit.
+ */
+export const serviceOrder = pgTable(
+  "service_order",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    customerId: text("customer_id").references(() => customer.id, {
+      onDelete: "set null",
+    }),
+    /** "open" | "completed" | "cancelled" */
+    status: text("status").notNull().default("open"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (t) => [
+    index("service_order_org_idx").on(t.organizationId),
+    index("service_order_customer_idx").on(t.customerId),
+  ],
+);
+
+/**
+ * Items within a service order (services and products).
+ * Prices are stored at item level to preserve historical values.
+ */
+export const serviceOrderItem = pgTable(
+  "service_order_item",
+  {
+    id: text("id").primaryKey(),
+    serviceOrderId: text("service_order_id")
+      .notNull()
+      .references(() => serviceOrder.id, { onDelete: "cascade" }),
+    /** "service" | "product" */
+    itemType: text("item_type").notNull(),
+    /** Original service or product ID (for reference, nullable if deleted) */
+    referenceId: text("reference_id"),
+    /** Snapshot of name at the time of creation */
+    name: text("name").notNull(),
+    quantity: integer("quantity").notNull().default(1),
+    /** Snapshot of unit price in cents at the time of creation */
+    unitPriceInCents: integer("unit_price_in_cents").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (t) => [index("service_order_item_order_idx").on(t.serviceOrderId)],
+);
+
+/**
+ * Associates professionals with service order items.
+ * Commission values are stored at this level for historical accuracy.
+ */
+export const serviceOrderItemProfessional = pgTable(
+  "service_order_item_professional",
+  {
+    id: text("id").primaryKey(),
+    serviceOrderItemId: text("service_order_item_id")
+      .notNull()
+      .references(() => serviceOrderItem.id, { onDelete: "cascade" }),
+    /** The professional who executed this item */
+    professionalId: text("professional_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** "fixed" | "percentage" */
+    commissionType: text("commission_type").notNull(),
+    /** Snapshot of fixed commission in cents */
+    fixedValueInCents: integer("fixed_value_in_cents"),
+    /** Snapshot of percentage value (basis points: 1000 = 10.00%) */
+    percentageValue: integer("percentage_value"),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (t) => [
+    index("so_item_professional_item_idx").on(t.serviceOrderItemId),
+    index("so_item_professional_user_idx").on(t.professionalId),
+  ],
+);
+
+/**
+ * Payments received for a service order.
+ * Tracked separately from the order total — the order total (invoiced)
+ * is the sum of items, while payments (received) are actual money received.
+ * Multiple payment methods can be used per order.
+ */
+export const serviceOrderPayment = pgTable(
+  "service_order_payment",
+  {
+    id: text("id").primaryKey(),
+    serviceOrderId: text("service_order_id")
+      .notNull()
+      .references(() => serviceOrder.id, { onDelete: "cascade" }),
+    paymentMethodId: text("payment_method_id")
+      .notNull()
+      .references(() => paymentMethod.id, { onDelete: "cascade" }),
+    /** Amount received in cents */
+    amountInCents: integer("amount_in_cents").notNull(),
+    paidAt: timestamp("paid_at").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (t) => [
+    index("service_order_payment_order_idx").on(t.serviceOrderId),
+    index("service_order_payment_method_idx").on(t.paymentMethodId),
+  ],
+);
+
+/**
+ * Quick items for fast addition to service orders.
+ * References a service or product for one-click addition.
+ */
+export const quickItem = pgTable(
+  "quick_item",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    /** "service" | "product" */
+    itemType: text("item_type").notNull(),
+    /** ID of the referenced service or product */
+    referenceId: text("reference_id").notNull(),
+    /** Display label (can differ from the original name) */
+    label: text("label").notNull(),
+    displayOrder: integer("display_order").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (t) => [index("quick_item_org_idx").on(t.organizationId)],
+);
