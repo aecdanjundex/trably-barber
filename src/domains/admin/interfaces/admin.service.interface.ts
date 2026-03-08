@@ -21,6 +21,8 @@ interface IAdminService {
   listAppointments(
     orgId: string,
     barberId?: string,
+    from?: Date,
+    to?: Date,
   ): Promise<
     (Appointment & {
       customerName: string;

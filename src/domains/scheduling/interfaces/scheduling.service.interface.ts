@@ -101,6 +101,30 @@ interface ISchedulingService {
     orgId: string,
     customerId: string,
   ): Promise<CustomerAppointment[]>;
+
+  getAppointmentStatsByDay(
+    orgId: string,
+    from: Date,
+    to: Date,
+    barberId?: string,
+  ): Promise<{ date: string; count: number }[]>;
+
+  getAppointmentStatsByMonth(
+    orgId: string,
+    year: number,
+    barberId?: string,
+  ): Promise<{ month: number; count: number }[]>;
+
+  getAppointmentStatsByDayPerBarber(
+    orgId: string,
+    from: Date,
+    to: Date,
+  ): Promise<{ barberId: string; barberName: string; date: string; count: number }[]>;
+
+  getAppointmentStatsByMonthPerBarber(
+    orgId: string,
+    year: number,
+  ): Promise<{ barberId: string; barberName: string; month: number; count: number }[]>;
 }
 
 export type { ISchedulingService };

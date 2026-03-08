@@ -1,6 +1,6 @@
 import "server-only";
 import { inject, injectable } from "inversify";
-import { eq, and, lt, gt, or, desc, notInArray } from "drizzle-orm";
+import { eq, and, lt, gt, or, desc, notInArray, gte, lte, count, sql } from "drizzle-orm";
 import type { Database } from "@/lib/db";
 import { TYPES } from "@/lib/di/types";
 import {
@@ -322,6 +322,116 @@ class SchedulingRepository implements ISchedulingRepository {
       .where(eq(organization.slug, slug))
       .limit(1);
     return rows[0] ?? null;
+  }
+
+  async countAppointmentsByDayPerBarber(
+    orgId: string,
+    from: Date,
+    to: Date,
+  ): Promise<{ barberId: string; barberName: string; date: string; count: number }[]> {
+    const rows = await this.db
+      .select({
+        barberId: appointment.barberId,
+        barberName: user.name,
+        date: sql<string>`to_char(date_trunc('day', ${appointment.startsAt}), 'YYYY-MM-DD')`,
+        count: count(),
+      })
+      .from(appointment)
+      .innerJoin(user, eq(appointment.barberId, user.id))
+      .where(
+        and(
+          eq(appointment.organizationId, orgId),
+          gte(appointment.startsAt, from),
+          lte(appointment.startsAt, to),
+          notInArray(appointment.status, ["cancelled"]),
+        ),
+      )
+      .groupBy(
+        appointment.barberId,
+        user.name,
+        sql`date_trunc('day', ${appointment.startsAt})`,
+      );
+
+    return rows.map((r) => ({ ...r, count: Number(r.count) }));
+  }
+
+  async countAppointmentsByMonthPerBarber(
+    orgId: string,
+    year: number,
+  ): Promise<{ barberId: string; barberName: string; month: number; count: number }[]> {
+    const rows = await this.db
+      .select({
+        barberId: appointment.barberId,
+        barberName: user.name,
+        month: sql<number>`extract(month from ${appointment.startsAt})::int`,
+        count: count(),
+      })
+      .from(appointment)
+      .innerJoin(user, eq(appointment.barberId, user.id))
+      .where(
+        and(
+          eq(appointment.organizationId, orgId),
+          sql`extract(year from ${appointment.startsAt}) = ${year}`,
+          notInArray(appointment.status, ["cancelled"]),
+        ),
+      )
+      .groupBy(
+        appointment.barberId,
+        user.name,
+        sql`extract(month from ${appointment.startsAt})`,
+      );
+
+    return rows.map((r) => ({ ...r, month: Number(r.month), count: Number(r.count) }));
+  }
+
+  async countAppointmentsByDay(
+    orgId: string,
+    from: Date,
+    to: Date,
+    barberId?: string,
+  ): Promise<{ date: string; count: number }[]> {
+    const conditions = [
+      eq(appointment.organizationId, orgId),
+      gte(appointment.startsAt, from),
+      lte(appointment.startsAt, to),
+      notInArray(appointment.status, ["cancelled"]),
+    ];
+    if (barberId) conditions.push(eq(appointment.barberId, barberId));
+
+    const rows = await this.db
+      .select({
+        date: sql<string>`to_char(date_trunc('day', ${appointment.startsAt}), 'YYYY-MM-DD')`,
+        count: count(),
+      })
+      .from(appointment)
+      .where(and(...conditions))
+      .groupBy(sql`date_trunc('day', ${appointment.startsAt})`);
+
+    return rows.map((r) => ({ date: r.date, count: Number(r.count) }));
+  }
+
+  async countAppointmentsByMonth(
+    orgId: string,
+    year: number,
+    barberId?: string,
+  ): Promise<{ month: number; count: number }[]> {
+    const conditions = [
+      eq(appointment.organizationId, orgId),
+      sql`extract(year from ${appointment.startsAt}) = ${year}`,
+      notInArray(appointment.status, ["cancelled"]),
+    ];
+    if (barberId) conditions.push(eq(appointment.barberId, barberId));
+
+    const rows = await this.db
+      .select({
+        month: sql<number>`extract(month from ${appointment.startsAt})::int`,
+        count: count(),
+      })
+      .from(appointment)
+      .where(and(...conditions))
+      .groupBy(sql`extract(month from ${appointment.startsAt})`);
+
+    return rows.map((r) => ({ month: Number(r.month), count: Number(r.count) }));
   }
 
   async listCustomerAppointments(orgId: string, customerId: string) {

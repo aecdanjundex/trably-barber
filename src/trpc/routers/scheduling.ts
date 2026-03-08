@@ -123,4 +123,58 @@ export const schedulingRouter = createTRPCRouter({
         input.status,
       ),
     ),
+
+  // ─── Appointment Stats ───────────────────────────────────────────────────
+
+  getAppointmentStatsByDay: orgProcedure
+    .input(
+      z.object({
+        from: z.date(),
+        to: z.date(),
+        barberId: z.string().optional(),
+      }),
+    )
+    .query(({ ctx, input }) => {
+      const barberId =
+        ctx.memberRole === ORG_ROLES.BARBER ? ctx.user.id : input.barberId;
+      return getService().getAppointmentStatsByDay(
+        ctx.orgId,
+        input.from,
+        input.to,
+        barberId,
+      );
+    }),
+
+  getAppointmentStatsByMonth: orgProcedure
+    .input(
+      z.object({
+        year: z.number().int(),
+        barberId: z.string().optional(),
+      }),
+    )
+    .query(({ ctx, input }) => {
+      const barberId =
+        ctx.memberRole === ORG_ROLES.BARBER ? ctx.user.id : input.barberId;
+      return getService().getAppointmentStatsByMonth(
+        ctx.orgId,
+        input.year,
+        barberId,
+      );
+    }),
+
+  getAppointmentStatsByDayPerBarber: orgAdminProcedure
+    .input(z.object({ from: z.date(), to: z.date() }))
+    .query(({ ctx, input }) =>
+      getService().getAppointmentStatsByDayPerBarber(
+        ctx.orgId,
+        input.from,
+        input.to,
+      ),
+    ),
+
+  getAppointmentStatsByMonthPerBarber: orgAdminProcedure
+    .input(z.object({ year: z.number().int() }))
+    .query(({ ctx, input }) =>
+      getService().getAppointmentStatsByMonthPerBarber(ctx.orgId, input.year),
+    ),
 });

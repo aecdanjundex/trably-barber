@@ -1,6 +1,6 @@
 import "server-only";
 import { inject, injectable } from "inversify";
-import { eq, and, count, gte, lt, desc } from "drizzle-orm";
+import { eq, and, count, gte, lte, lt, desc } from "drizzle-orm";
 import type { Database } from "@/lib/db";
 import { TYPES } from "@/lib/di/types";
 import { service, customer, appointment, user } from "@/db/schema";
@@ -80,9 +80,11 @@ class AdminRepository implements IAdminRepository {
 
   // ─── Appointments ────────────────────────────────────────────────────────────
 
-  async listAppointments(orgId: string, barberId?: string) {
+  async listAppointments(orgId: string, barberId?: string, from?: Date, to?: Date) {
     const conditions = [eq(appointment.organizationId, orgId)];
     if (barberId) conditions.push(eq(appointment.barberId, barberId));
+    if (from) conditions.push(gte(appointment.startsAt, from));
+    if (to) conditions.push(lte(appointment.startsAt, to));
 
     const rows = await this.db
       .select({

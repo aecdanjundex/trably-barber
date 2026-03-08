@@ -373,6 +373,31 @@ class SchedulingService implements ISchedulingService {
   async listCustomerAppointments(orgId: string, customerId: string) {
     return this.repo.listCustomerAppointments(orgId, customerId);
   }
+
+  async getAppointmentStatsByDay(
+    orgId: string,
+    from: Date,
+    to: Date,
+    barberId?: string,
+  ) {
+    return this.repo.countAppointmentsByDay(orgId, from, to, barberId);
+  }
+
+  async getAppointmentStatsByMonth(
+    orgId: string,
+    year: number,
+    barberId?: string,
+  ) {
+    return this.repo.countAppointmentsByMonth(orgId, year, barberId);
+  }
+
+  async getAppointmentStatsByDayPerBarber(orgId: string, from: Date, to: Date) {
+    return this.repo.countAppointmentsByDayPerBarber(orgId, from, to);
+  }
+
+  async getAppointmentStatsByMonthPerBarber(orgId: string, year: number) {
+    return this.repo.countAppointmentsByMonthPerBarber(orgId, year);
+  }
 }
 
 export { SchedulingService };

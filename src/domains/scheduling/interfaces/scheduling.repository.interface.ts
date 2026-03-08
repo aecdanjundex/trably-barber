@@ -110,6 +110,30 @@ interface ISchedulingRepository {
 
   getOrgBySlug(slug: string): Promise<{ id: string } | null>;
 
+  countAppointmentsByDayPerBarber(
+    orgId: string,
+    from: Date,
+    to: Date,
+  ): Promise<{ barberId: string; barberName: string; date: string; count: number }[]>;
+
+  countAppointmentsByMonthPerBarber(
+    orgId: string,
+    year: number,
+  ): Promise<{ barberId: string; barberName: string; month: number; count: number }[]>;
+
+  countAppointmentsByDay(
+    orgId: string,
+    from: Date,
+    to: Date,
+    barberId?: string,
+  ): Promise<{ date: string; count: number }[]>;
+
+  countAppointmentsByMonth(
+    orgId: string,
+    year: number,
+    barberId?: string,
+  ): Promise<{ month: number; count: number }[]>;
+
   /** Customer appointments with barber + service names */
   listCustomerAppointments(
     orgId: string,

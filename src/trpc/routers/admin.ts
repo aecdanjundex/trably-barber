@@ -42,9 +42,24 @@ export const adminRouter = createTRPCRouter({
   ),
 
   // ─── Appointments ──────────────────────────────────────────────────────────
-  listAppointments: orgProcedure.query(({ ctx }) => {
-    const barberId =
-      ctx.memberRole === ORG_ROLES.BARBER ? ctx.user.id : undefined;
-    return getService().listAppointments(ctx.orgId, barberId);
-  }),
+  listAppointments: orgProcedure
+    .input(
+      z
+        .object({
+          from: z.date().optional(),
+          to: z.date().optional(),
+          barberId: z.string().optional(),
+        })
+        .optional(),
+    )
+    .query(({ ctx, input }) => {
+      const barberId =
+        ctx.memberRole === ORG_ROLES.BARBER ? ctx.user.id : input?.barberId;
+      return getService().listAppointments(
+        ctx.orgId,
+        barberId,
+        input?.from,
+        input?.to,
+      );
+    }),
 });
