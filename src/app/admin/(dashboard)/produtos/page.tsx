@@ -93,7 +93,11 @@ export default function ProdutosPage() {
 
   function openEdit(p: NonNullable<typeof products>[number]) {
     setEditingId(p.id);
-    form.reset({ name: p.name, priceInCents: p.priceInCents, active: p.active });
+    form.reset({
+      name: p.name,
+      priceInCents: p.priceInCents,
+      active: p.active,
+    });
     setDialogOpen(true);
   }
 

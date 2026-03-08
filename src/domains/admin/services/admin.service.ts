@@ -55,7 +55,12 @@ class AdminService implements IAdminService {
     return this.repository.listOrgMembers(orgId);
   }
 
-  async listAppointments(orgId: string, barberId?: string, from?: Date, to?: Date) {
+  async listAppointments(
+    orgId: string,
+    barberId?: string,
+    from?: Date,
+    to?: Date,
+  ) {
     return this.repository.listAppointments(orgId, barberId, from, to);
   }
 

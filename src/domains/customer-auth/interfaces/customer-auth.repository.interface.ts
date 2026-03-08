@@ -33,6 +33,10 @@ interface ICustomerAuthRepository {
   ): Promise<CustomerSession>;
   findSessionByToken(token: string): Promise<CustomerSession | null>;
   findCustomerById(id: string): Promise<Customer | null>;
+  updateCustomer(
+    id: string,
+    data: { name: string; email: string },
+  ): Promise<Customer>;
 }
 
 export type { ICustomerAuthRepository };

@@ -11,7 +11,12 @@ export const updateCustomerSchema = z.object({
   id: z.string(),
   name: z.string().min(1, "Nome é obrigatório").optional(),
   phone: z.string().min(1, "Telefone é obrigatório").optional(),
-  email: z.string().email("Email inválido").optional().or(z.literal("")).nullable(),
+  email: z
+    .string()
+    .email("Email inválido")
+    .optional()
+    .or(z.literal(""))
+    .nullable(),
   notes: z.string().optional().nullable(),
   active: z.boolean().optional(),
 });

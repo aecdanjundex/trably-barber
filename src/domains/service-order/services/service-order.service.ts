@@ -268,7 +268,9 @@ class ServiceOrderService implements IServiceOrderService {
       } else {
         // percentage: basis points (1000 = 10.00%)
         commissionAmountInCents = Math.round(
-          (item.unitPriceInCents * item.quantity * (item.percentageValue ?? 0)) /
+          (item.unitPriceInCents *
+            item.quantity *
+            (item.percentageValue ?? 0)) /
             10000,
         );
       }

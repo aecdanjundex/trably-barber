@@ -34,8 +34,7 @@ export type ServiceOrderItemProfessionalInsert =
   typeof serviceOrderItemProfessional.$inferInsert;
 
 export type ServiceOrderPayment = typeof serviceOrderPayment.$inferSelect;
-export type ServiceOrderPaymentInsert =
-  typeof serviceOrderPayment.$inferInsert;
+export type ServiceOrderPaymentInsert = typeof serviceOrderPayment.$inferInsert;
 
 export type QuickItem = typeof quickItem.$inferSelect;
 export type QuickItemInsert = typeof quickItem.$inferInsert;

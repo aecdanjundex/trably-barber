@@ -154,6 +154,16 @@ class CustomerAuthRepository implements ICustomerAuthRepository {
       .limit(1);
     return rows[0] ?? null;
   }
+
+  async updateCustomer(id: string, data: { name: string; email: string }) {
+    const rows = await this.db
+      .update(customer)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(customer.id, id))
+      .returning();
+    if (!rows[0]) throw new Error("Customer not found");
+    return rows[0];
+  }
 }
 
 export { CustomerAuthRepository };

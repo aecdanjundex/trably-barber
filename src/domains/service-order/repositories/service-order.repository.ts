@@ -738,8 +738,7 @@ class ServiceOrderRepository implements IServiceOrderRepository {
       .select({
         paymentMethodId: serviceOrderPayment.paymentMethodId,
         paymentMethodName: paymentMethod.name,
-        totalInCents:
-          sql<number>`coalesce(sum(${serviceOrderPayment.amountInCents}), 0)`,
+        totalInCents: sql<number>`coalesce(sum(${serviceOrderPayment.amountInCents}), 0)`,
       })
       .from(serviceOrderPayment)
       .innerJoin(
@@ -768,8 +767,7 @@ class ServiceOrderRepository implements IServiceOrderRepository {
       .select({
         professionalId: serviceOrderItemProfessional.professionalId,
         professionalName: user.name,
-        totalInCents:
-          sql<number>`coalesce(sum(${serviceOrderItem.unitPriceInCents} * ${serviceOrderItem.quantity}), 0)`,
+        totalInCents: sql<number>`coalesce(sum(${serviceOrderItem.unitPriceInCents} * ${serviceOrderItem.quantity}), 0)`,
       })
       .from(serviceOrderItemProfessional)
       .innerJoin(
@@ -783,10 +781,7 @@ class ServiceOrderRepository implements IServiceOrderRepository {
         serviceOrder,
         eq(serviceOrderItem.serviceOrderId, serviceOrder.id),
       )
-      .innerJoin(
-        user,
-        eq(serviceOrderItemProfessional.professionalId, user.id),
-      )
+      .innerJoin(user, eq(serviceOrderItemProfessional.professionalId, user.id))
       .where(
         and(
           eq(serviceOrder.organizationId, orgId),
@@ -806,8 +801,7 @@ class ServiceOrderRepository implements IServiceOrderRepository {
       .select({
         referenceId: serviceOrderItem.referenceId,
         name: serviceOrderItem.name,
-        totalInCents:
-          sql<number>`coalesce(sum(${serviceOrderItem.unitPriceInCents} * ${serviceOrderItem.quantity}), 0)`,
+        totalInCents: sql<number>`coalesce(sum(${serviceOrderItem.unitPriceInCents} * ${serviceOrderItem.quantity}), 0)`,
       })
       .from(serviceOrderItem)
       .innerJoin(
@@ -834,8 +828,7 @@ class ServiceOrderRepository implements IServiceOrderRepository {
       .select({
         referenceId: serviceOrderItem.referenceId,
         name: serviceOrderItem.name,
-        totalInCents:
-          sql<number>`coalesce(sum(${serviceOrderItem.unitPriceInCents} * ${serviceOrderItem.quantity}), 0)`,
+        totalInCents: sql<number>`coalesce(sum(${serviceOrderItem.unitPriceInCents} * ${serviceOrderItem.quantity}), 0)`,
       })
       .from(serviceOrderItem)
       .innerJoin(

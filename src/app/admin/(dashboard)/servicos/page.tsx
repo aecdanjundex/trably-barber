@@ -195,7 +195,10 @@ export default function ServicosPage() {
                       <Switch
                         checked={svc.active}
                         onCheckedChange={(val) =>
-                          toggleActiveMutation.mutate({ id: svc.id, active: val })
+                          toggleActiveMutation.mutate({
+                            id: svc.id,
+                            active: val,
+                          })
                         }
                         disabled={toggleActiveMutation.isPending}
                       />

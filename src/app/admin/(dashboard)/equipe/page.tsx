@@ -206,7 +206,9 @@ export default function EquipePage() {
                 onValueChange={(val) => val && form.setValue("role", val)}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue>
+                    {ROLE_LABELS[form.watch("role")] ?? form.watch("role")}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="admin">Admin</SelectItem>

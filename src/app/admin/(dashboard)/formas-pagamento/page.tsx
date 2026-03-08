@@ -190,7 +190,9 @@ export default function FormasPagamentoPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {editingId ? "Editar Forma de Pagamento" : "Nova Forma de Pagamento"}
+              {editingId
+                ? "Editar Forma de Pagamento"
+                : "Nova Forma de Pagamento"}
             </DialogTitle>
             <DialogDescription>
               {editingId

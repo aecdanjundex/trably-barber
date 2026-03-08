@@ -7,6 +7,7 @@ import type { ICustomerAuthRepository } from "../interfaces/customer-auth.reposi
 import type { ICustomerAuthService } from "../interfaces/customer-auth.service.interface";
 import type {
   RequestOtpInput,
+  UpdateProfileInput,
   VerifyOtpInput,
 } from "../schemas/customer-auth.schema";
 
@@ -86,6 +87,29 @@ class CustomerAuthService implements ICustomerAuthService {
     await this.repository.createSession(customer.id, org.id, token, expiresAt);
 
     return { token, customerId: customer.id };
+  }
+
+  async getProfile(customerId: string) {
+    const customer = await this.repository.findCustomerById(customerId);
+    if (!customer) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Cliente não encontrado",
+      });
+    }
+    return {
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
+      needsOnboarding: customer.name === customer.phone && !customer.email,
+    };
+  }
+
+  async updateProfile(customerId: string, input: UpdateProfileInput) {
+    return this.repository.updateCustomer(customerId, {
+      name: input.name,
+      email: input.email,
+    });
   }
 }
 
