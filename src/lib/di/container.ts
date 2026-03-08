@@ -10,6 +10,10 @@ import { AdminRepository } from "@/domains/admin/repositories/admin.repository";
 import { AdminService } from "@/domains/admin/services/admin.service";
 import type { IAdminRepository } from "@/domains/admin/interfaces/admin.repository.interface";
 import type { IAdminService } from "@/domains/admin/interfaces/admin.service.interface";
+import { SchedulingRepository } from "@/domains/scheduling/repositories/scheduling.repository";
+import { SchedulingService } from "@/domains/scheduling/services/scheduling.service";
+import type { ISchedulingRepository } from "@/domains/scheduling/interfaces/scheduling.repository.interface";
+import type { ISchedulingService } from "@/domains/scheduling/interfaces/scheduling.service.interface";
 
 const container = new Container();
 
@@ -33,6 +37,16 @@ container
 container
   .bind<IAdminService>(TYPES.AdminService)
   .to(AdminService)
+  .inSingletonScope();
+
+container
+  .bind<ISchedulingRepository>(TYPES.SchedulingRepository)
+  .to(SchedulingRepository)
+  .inSingletonScope();
+
+container
+  .bind<ISchedulingService>(TYPES.SchedulingService)
+  .to(SchedulingService)
   .inSingletonScope();
 
 export { container };

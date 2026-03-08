@@ -4,4 +4,6 @@ export const TYPES = {
   CustomerAuthService: Symbol.for("CustomerAuthService"),
   AdminRepository: Symbol.for("AdminRepository"),
   AdminService: Symbol.for("AdminService"),
+  SchedulingRepository: Symbol.for("SchedulingRepository"),
+  SchedulingService: Symbol.for("SchedulingService"),
 } as const;

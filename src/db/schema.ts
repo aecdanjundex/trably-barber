@@ -5,6 +5,7 @@ import {
   text,
   timestamp,
   unique,
+  index,
 } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
@@ -197,7 +198,92 @@ export const appointment = pgTable("appointment", {
   /** Scheduled end time */
   endsAt: timestamp("ends_at").notNull(),
   status: text("status").notNull().default("scheduled"),
+  /** "regular" | "squeeze_in" */
+  type: text("type").notNull().default("regular"),
   notes: text("notes"),
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
 });
+
+// ─── Scheduling domain ───────────────────────────────────────────────────────
+
+/**
+ * Schedule configuration per barber per day of week.
+ * Defines working hours and slot intervals.
+ */
+export const scheduleConfig = pgTable(
+  "schedule_config",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    barberId: text("barber_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** 0 = Sunday, 1 = Monday, …, 6 = Saturday */
+    dayOfWeek: integer("day_of_week").notNull(),
+    /** Working hours start, e.g. "08:00" */
+    startTime: text("start_time").notNull(),
+    /** Working hours end (closing time), e.g. "18:00" */
+    endTime: text("end_time").notNull(),
+    /** Minutes between appointment slot starts */
+    slotIntervalMinutes: integer("slot_interval_minutes").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (t) => [
+    unique("schedule_config_barber_day_unique").on(t.barberId, t.dayOfWeek),
+  ],
+);
+
+/**
+ * Barber time blocks — date/time ranges where the barber is unavailable.
+ */
+export const barberTimeBlock = pgTable(
+  "barber_time_block",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    barberId: text("barber_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    startsAt: timestamp("starts_at").notNull(),
+    endsAt: timestamp("ends_at").notNull(),
+    reason: text("reason"),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (t) => [index("barber_time_block_barber_idx").on(t.barberId)],
+);
+
+/**
+ * Customer blocks — prevent a specific customer from booking with a barber
+ * on a certain day of week or specific date. Hidden from the customer.
+ */
+export const customerBlock = pgTable(
+  "customer_block",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    barberId: text("barber_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    customerId: text("customer_id")
+      .notNull()
+      .references(() => customer.id, { onDelete: "cascade" }),
+    /** Recurring block on a day of week (0–6), or null */
+    dayOfWeek: integer("day_of_week"),
+    /** Specific date block as "YYYY-MM-DD", or null */
+    blockedDate: text("blocked_date"),
+    reason: text("reason"),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (t) => [
+    index("customer_block_barber_customer_idx").on(t.barberId, t.customerId),
+  ],
+);

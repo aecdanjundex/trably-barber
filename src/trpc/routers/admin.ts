@@ -7,6 +7,7 @@ import {
   createServiceSchema,
   updateServiceSchema,
 } from "@/domains/admin/schemas/service.schema";
+import { ORG_ROLES } from "@/lib/permissions";
 
 const getService = () => container.get<IAdminService>(TYPES.AdminService);
 
@@ -41,7 +42,9 @@ export const adminRouter = createTRPCRouter({
   ),
 
   // ─── Appointments ──────────────────────────────────────────────────────────
-  listAppointments: orgProcedure.query(({ ctx }) =>
-    getService().listAppointments(ctx.orgId),
-  ),
+  listAppointments: orgProcedure.query(({ ctx }) => {
+    const barberId =
+      ctx.memberRole === ORG_ROLES.BARBER ? ctx.user.id : undefined;
+    return getService().listAppointments(ctx.orgId, barberId);
+  }),
 });

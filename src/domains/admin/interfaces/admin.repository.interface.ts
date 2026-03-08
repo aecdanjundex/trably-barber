@@ -19,7 +19,10 @@ interface IAdminRepository {
   listCustomers(orgId: string): Promise<Customer[]>;
 
   // Appointments
-  listAppointments(orgId: string): Promise<
+  listAppointments(
+    orgId: string,
+    barberId?: string,
+  ): Promise<
     (Appointment & {
       customerName: string;
       customerPhone: string;

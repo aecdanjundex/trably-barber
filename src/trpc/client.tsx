@@ -14,6 +14,18 @@ function getBaseUrl() {
   return clientEnv.NEXT_PUBLIC_APP_URL;
 }
 
+function getCustomerToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("customer-session");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 let browserQueryClient: ReturnType<typeof makeQueryClient> | undefined;
 
 function getQueryClient() {
@@ -30,6 +42,10 @@ export function TRPCReactProvider({ children }: { children: React.ReactNode }) {
         httpBatchLink({
           transformer: superjson,
           url: getBaseUrl() + "/api/trpc",
+          headers() {
+            const token = getCustomerToken();
+            return token ? { "x-customer-token": token } : {};
+          },
         }),
       ],
     }),

@@ -80,7 +80,10 @@ class AdminRepository implements IAdminRepository {
 
   // ─── Appointments ────────────────────────────────────────────────────────────
 
-  async listAppointments(orgId: string) {
+  async listAppointments(orgId: string, barberId?: string) {
+    const conditions = [eq(appointment.organizationId, orgId)];
+    if (barberId) conditions.push(eq(appointment.barberId, barberId));
+
     const rows = await this.db
       .select({
         id: appointment.id,
@@ -91,6 +94,7 @@ class AdminRepository implements IAdminRepository {
         startsAt: appointment.startsAt,
         endsAt: appointment.endsAt,
         status: appointment.status,
+        type: appointment.type,
         notes: appointment.notes,
         createdAt: appointment.createdAt,
         updatedAt: appointment.updatedAt,
@@ -103,7 +107,7 @@ class AdminRepository implements IAdminRepository {
       .innerJoin(customer, eq(appointment.customerId, customer.id))
       .innerJoin(user, eq(appointment.barberId, user.id))
       .innerJoin(service, eq(appointment.serviceId, service.id))
-      .where(eq(appointment.organizationId, orgId))
+      .where(and(...conditions))
       .orderBy(desc(appointment.startsAt));
 
     return rows;

@@ -12,6 +12,7 @@ import {
   Link2,
   Check,
   Copy,
+  Clock,
 } from "lucide-react";
 import {
   Sidebar,
@@ -37,6 +38,7 @@ const navItems = [
   { title: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { title: "Serviços", href: "/admin/servicos", icon: Scissors },
   { title: "Equipe", href: "/admin/equipe", icon: Users },
+  { title: "Agenda", href: "/admin/agenda", icon: Clock },
   { title: "Agendamentos", href: "/admin/agendamentos", icon: CalendarDays },
   { title: "Clientes", href: "/admin/clientes", icon: UserCircle },
 ];
