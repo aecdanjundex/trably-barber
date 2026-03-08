@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useTRPC } from "@/trpc/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
@@ -99,6 +100,7 @@ const STATUS_VARIANTS: Record<
 export default function PagamentoComissoesPage() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const { data: planData, isLoading: isLoadingPlan } = useQuery(
     trpc.subscription.getCurrentPlan.queryOptions(),
@@ -115,7 +117,7 @@ export default function PagamentoComissoesPage() {
   const [genFrom, setGenFrom] = useState(toDatetimeLocal(defaultRange.from));
   const [genTo, setGenTo] = useState(toDatetimeLocal(defaultRange.to));
 
-  const { data: activeMember } = useQuery({
+  const { data: activeMember, isLoading: isLoadingMember } = useQuery({
     queryKey: ["active-member"],
     queryFn: async () => {
       const result = await authClient.organization.getActiveMember();
@@ -188,7 +190,11 @@ export default function PagamentoComissoesPage() {
     });
   }
 
-  if (!isLoadingPlan && planData?.plan !== "premium") {
+  if (!isLoadingPlan && !isLoadingMember && planData?.plan !== "premium") {
+    if (isBarber) {
+      router.replace("/admin/agendamentos");
+      return null;
+    }
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-20 text-center gap-4">
         <Lock className="h-10 w-10 text-muted-foreground" />

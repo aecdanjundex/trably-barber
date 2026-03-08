@@ -36,6 +36,19 @@ export type CreateBarberTimeBlockInput = z.infer<
   typeof createBarberTimeBlockSchema
 >;
 
+// ─── Barber Daily Block ───────────────────────────────────────────────────────
+
+export const createBarberDailyBlockSchema = z.object({
+  barberId: z.string(),
+  startTime: z.string().regex(timeRegex, "Formato inválido, use HH:mm"),
+  endTime: z.string().regex(timeRegex, "Formato inválido, use HH:mm"),
+  reason: z.string().optional(),
+});
+
+export type CreateBarberDailyBlockInput = z.infer<
+  typeof createBarberDailyBlockSchema
+>;
+
 // ─── Customer Block ──────────────────────────────────────────────────────────
 
 export const createCustomerBlockSchema = z.object({
@@ -45,6 +58,16 @@ export const createCustomerBlockSchema = z.object({
   blockedDate: z
     .string()
     .regex(dateRegex, "Formato inválido, use YYYY-MM-DD")
+    .nullable(),
+  startTime: z
+    .string()
+    .regex(timeRegex, "Formato inválido, use HH:mm")
+    .optional()
+    .nullable(),
+  endTime: z
+    .string()
+    .regex(timeRegex, "Formato inválido, use HH:mm")
+    .optional()
     .nullable(),
   reason: z.string().optional(),
 });
@@ -84,6 +107,20 @@ export const requestSqueezeInSchema = z.object({
 
 export type RequestSqueezeInInput = z.infer<typeof requestSqueezeInSchema>;
 
+// ─── Create Appointment For Customer (by org member) ─────────────────────────
+
+export const createAppointmentForCustomerSchema = z.object({
+  customerId: z.string(),
+  barberId: z.string(),
+  serviceId: z.string(),
+  startsAt: z.coerce.date(),
+  notes: z.string().optional(),
+});
+
+export type CreateAppointmentForCustomerInput = z.infer<
+  typeof createAppointmentForCustomerSchema
+>;
+
 // ─── Confirm / Reject ────────────────────────────────────────────────────────
 
 export const appointmentIdSchema = z.object({
@@ -92,5 +129,5 @@ export const appointmentIdSchema = z.object({
 
 export const updateAppointmentStatusSchema = z.object({
   appointmentId: z.string(),
-  status: z.enum(["scheduled", "completed", "cancelled", "no-show"]),
+  status: z.enum(["scheduled", "waiting", "in_service", "completed", "cancelled", "no-show"]),
 });

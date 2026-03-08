@@ -1,6 +1,7 @@
 import type {
   ScheduleConfig,
   BarberTimeBlock,
+  BarberDailyBlock,
   CustomerBlock,
   Appointment,
   CustomerAppointment,
@@ -8,6 +9,7 @@ import type {
 import type {
   UpsertScheduleConfigInput,
   CreateBarberTimeBlockInput,
+  CreateBarberDailyBlockInput,
   CreateCustomerBlockInput,
   CreateAppointmentInput,
   RequestSqueezeInInput,
@@ -43,6 +45,19 @@ interface ISchedulingService {
   ): Promise<BarberTimeBlock>;
 
   deleteBarberTimeBlock(orgId: string, id: string): Promise<void>;
+
+  // ─── Barber Daily Blocks ──────────────────────────────────────────────────
+  listBarberDailyBlocks(
+    orgId: string,
+    barberId?: string,
+  ): Promise<BarberDailyBlock[]>;
+
+  createBarberDailyBlock(
+    orgId: string,
+    input: CreateBarberDailyBlockInput,
+  ): Promise<BarberDailyBlock>;
+
+  deleteBarberDailyBlock(orgId: string, id: string): Promise<void>;
 
   // ─── Customer Blocks ─────────────────────────────────────────────────────
   listCustomerBlocks(
@@ -96,6 +111,18 @@ interface ISchedulingService {
     appointmentId: string,
     status: string,
   ): Promise<Appointment | null>;
+
+  markAsWaiting(orgId: string, appointmentId: string): Promise<Appointment | null>;
+
+  markAsInService(orgId: string, appointmentId: string): Promise<Appointment | null>;
+
+  callCustomer(orgId: string, appointmentId: string): Promise<Appointment | null>;
+
+  getLatestCall(orgSlug: string): Promise<{
+    appointmentId: string;
+    customerName: string;
+    barberName: string;
+  } | null>;
 
   listCustomerAppointments(
     orgId: string,

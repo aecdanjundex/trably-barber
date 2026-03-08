@@ -68,6 +68,19 @@ export const adminRouter = createTRPCRouter({
       getService().toggleUserBan(input.userId, input.banned),
     ),
 
+  // ─── Customers & Services for Booking (accessible to barbers) ─────────────
+  listCustomersBasic: orgProcedure
+    .input(z.object({ search: z.string().optional() }).optional())
+    .query(({ ctx, input }) =>
+      getService().listCustomers(ctx.orgId, input?.search),
+    ),
+
+  listServicesBasic: orgProcedure
+    .input(z.object({ search: z.string().optional() }).optional())
+    .query(({ ctx, input }) =>
+      getService().listServices(ctx.orgId, input?.search),
+    ),
+
   // ─── Appointments ──────────────────────────────────────────────────────────
   listAppointments: orgProcedure
     .input(

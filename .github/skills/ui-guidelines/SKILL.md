@@ -186,6 +186,80 @@ function formatDate(date: Date) {
 }
 ```
 
+## 3. Inputs com Busca — Debounce para Listas Grandes
+
+Quando um campo de seleção puder exibir **mais de 10 resultados** (ex.: clientes, profissionais, serviços, produtos), **nunca** use um `<Select>` simples que carrega todos os itens de uma vez. Use um **combobox com busca e debounce** para evitar exibir milhares de resultados e sobrecarregar o servidor.
+
+**A busca deve ser sempre por nome.**
+
+### Padrão: Popover + Command com busca server-side debounced
+
+```tsx
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useTRPC } from "@/trpc/utils";
+
+function useDebounce<T>(value: T, delay = 300): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
+// No componente:
+const [open, setOpen] = useState(false);
+const [search, setSearch] = useState("");
+const debouncedSearch = useDebounce(search);
+
+const { data: items } = useQuery(
+  trpc.admin.listItemsBasic.queryOptions({ search: debouncedSearch }),
+);
+
+<Popover open={open} onOpenChange={setOpen}>
+  <PopoverTrigger asChild>
+    <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
+      {selectedId
+        ? (items?.find((i) => i.id === selectedId)?.name ?? "Selecione")
+        : "Selecione um item"}
+      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+    </Button>
+  </PopoverTrigger>
+  <PopoverContent className="p-0">
+    <Command shouldFilter={false}>
+      <CommandInput placeholder="Buscar por nome..." value={search} onValueChange={setSearch} />
+      <CommandList>
+        <CommandEmpty>Nenhum resultado encontrado.</CommandEmpty>
+        <CommandGroup>
+          {items?.map((item) => (
+            <CommandItem
+              key={item.id}
+              value={item.id}
+              onSelect={() => { setSelectedId(item.id); setOpen(false); }}
+            >
+              <Check className={cn("mr-2 h-4 w-4", selectedId === item.id ? "opacity-100" : "opacity-0")} />
+              {item.name}
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      </CommandList>
+    </Command>
+  </PopoverContent>
+</Popover>
+```
+
+**Regras:**
+- Use `shouldFilter={false}` no `<Command>` quando a filtragem é feita no servidor.
+- O endpoint deve aceitar um parâmetro `search?: string` e filtrar por nome (`ILIKE '%search%'`).
+- Debounce de **300ms** por padrão.
+- Para listas pequenas já carregadas em memória (ex.: profissionais de uma organização), use a mesma UI mas filtre client-side sem debounce de rede.
+
 ## Full Page Structure (summary)
 
 ```

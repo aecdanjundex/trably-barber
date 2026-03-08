@@ -55,7 +55,13 @@ export function BookingPage({ org }: { org: Org }) {
   }
 
   if (session) {
-    return <BookingScreen org={org} onSignOut={clearSession} />;
+    return (
+      <BookingScreen
+        org={org}
+        onSignOut={clearSession}
+        customerName={profile?.name ?? undefined}
+      />
+    );
   }
 
   if (step === "otp") {

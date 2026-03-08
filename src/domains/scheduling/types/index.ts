@@ -1,12 +1,14 @@
 import type {
   scheduleConfig,
   barberTimeBlock,
+  barberDailyBlock,
   customerBlock,
   appointment,
 } from "@/db/schema";
 
 export type ScheduleConfig = typeof scheduleConfig.$inferSelect;
 export type BarberTimeBlock = typeof barberTimeBlock.$inferSelect;
+export type BarberDailyBlock = typeof barberDailyBlock.$inferSelect;
 export type CustomerBlock = typeof customerBlock.$inferSelect;
 export type Appointment = typeof appointment.$inferSelect;
 

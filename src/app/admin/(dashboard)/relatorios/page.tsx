@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useTRPC } from "@/trpc/utils";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, Search, DollarSign, Wallet } from "lucide-react";
@@ -69,6 +70,9 @@ const STATUS_VARIANTS: Record<
 };
 
 export default function RelatoriosPage() {
+  const trpc = useTRPC();
+  const router = useRouter();
+
   const { data: activeMember, isLoading: loadingMember } = useQuery({
     queryKey: ["active-member"],
     queryFn: async () => {
@@ -77,7 +81,11 @@ export default function RelatoriosPage() {
     },
   });
 
-  if (loadingMember) {
+  const { data: planData, isLoading: loadingPlan } = useQuery(
+    trpc.subscription.getCurrentPlan.queryOptions(),
+  );
+
+  if (loadingMember || loadingPlan) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-8 w-48" />
@@ -87,8 +95,13 @@ export default function RelatoriosPage() {
   }
 
   if (activeMember?.role === "barber") {
+    if (planData?.plan !== "premium") {
+      router.replace("/admin/agendamentos");
+      return null;
+    }
     return <BarberCommissionReport />;
   }
+
 
   return <AdminReportsView />;
 }

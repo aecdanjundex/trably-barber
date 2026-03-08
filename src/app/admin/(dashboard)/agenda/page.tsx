@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useTRPC } from "@/trpc/utils";
 import { authClient } from "@/lib/auth-client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Clock, Plus, Trash2, CalendarOff } from "lucide-react";
+import { Clock, Plus, Trash2, CalendarOff, UserX, Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +35,31 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
+import { useDebounce } from "@/hooks/use-debounce";
 
 const DAY_NAMES = [
   "Domingo",
@@ -131,8 +156,10 @@ export default function AgendaPage() {
             <ScheduleConfigSection barberId={selectedBarberId} />
           </TabsContent>
 
-          <TabsContent value="bloqueios" className="mt-4">
+          <TabsContent value="bloqueios" className="mt-4 space-y-6">
             <TimeBlocksSection barberId={selectedBarberId} />
+            <BarberDailyBlocksSection barberId={selectedBarberId} />
+            <CustomerBlocksSection barberId={selectedBarberId} />
           </TabsContent>
         </Tabs>
       )}
@@ -353,12 +380,612 @@ function DayConfigRow({
   );
 }
 
+// ─── Confirm Delete Dialog ────────────────────────────────────────────────────
+
+function ConfirmDeleteDialog({
+  open,
+  onOpenChange,
+  onConfirm,
+  isPending,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+  isPending: boolean;
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent size="sm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remover bloqueio</AlertDialogTitle>
+          <AlertDialogDescription>
+            Tem certeza que deseja remover este bloqueio? Esta ação não pode ser
+            desfeita.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={isPending}
+            onClick={onConfirm}
+          >
+            {isPending ? "Removendo..." : "Remover"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+// ─── Barber Daily Blocks Section ──────────────────────────────────────────────
+
+function BarberDailyBlocksSection({ barberId }: { barberId: string }) {
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const { data: blocks, isLoading } = useQuery(
+    trpc.scheduling.listBarberDailyBlocks.queryOptions({ barberId }),
+  );
+
+  const createMutation = useMutation(
+    trpc.scheduling.createBarberDailyBlock.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: trpc.scheduling.listBarberDailyBlocks.queryKey({ barberId }),
+        });
+        setDialogOpen(false);
+      },
+    }),
+  );
+
+  const deleteMutation = useMutation(
+    trpc.scheduling.deleteBarberDailyBlock.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: trpc.scheduling.listBarberDailyBlocks.queryKey({ barberId }),
+        });
+        setDeleteId(null);
+      },
+    }),
+  );
+
+  const [startTime, setStartTime] = useState("12:00");
+  const [endTime, setEndTime] = useState("14:00");
+  const [reason, setReason] = useState("");
+
+  function handleCreate() {
+    if (!startTime || !endTime) return;
+    createMutation.mutate({ barberId, startTime, endTime, reason: reason || undefined });
+  }
+
+  function resetForm() {
+    setStartTime("12:00");
+    setEndTime("14:00");
+    setReason("");
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="text-lg">Intervalos diários</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Horários bloqueados todos os dias (ex: horário de almoço)
+          </p>
+        </div>
+        <Button
+          size="sm"
+          onClick={() => {
+            resetForm();
+            setDialogOpen(true);
+          }}
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Novo intervalo
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : !blocks?.length ? (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-center">
+            <Clock className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              Nenhum intervalo diário cadastrado
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Início</TableHead>
+                  <TableHead>Fim</TableHead>
+                  <TableHead>Motivo</TableHead>
+                  <TableHead className="w-16">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {blocks.map((block) => (
+                  <TableRow key={block.id}>
+                    <TableCell>{block.startTime}</TableCell>
+                    <TableCell>{block.endTime}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {block.reason ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setDeleteId(block.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo intervalo diário</DialogTitle>
+            <DialogDescription>
+              Este horário ficará bloqueado para agendamentos todos os dias,
+              independentemente do cliente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="daily-start">Início</Label>
+                <Input
+                  id="daily-start"
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="daily-end">Fim</Label>
+                <Input
+                  id="daily-end"
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="daily-reason">Motivo (opcional)</Label>
+              <Input
+                id="daily-reason"
+                placeholder="Ex: Horário de almoço"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </div>
+          </div>
+          {createMutation.error && (
+            <p className="text-sm text-destructive">
+              {createMutation.error.message}
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={!startTime || !endTime || createMutation.isPending}
+              onClick={handleCreate}
+            >
+              {createMutation.isPending ? "Salvando..." : "Criar intervalo"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDeleteDialog
+        open={!!deleteId}
+        onOpenChange={(open) => !open && setDeleteId(null)}
+        onConfirm={() => deleteId && deleteMutation.mutate({ id: deleteId })}
+        isPending={deleteMutation.isPending}
+      />
+    </Card>
+  );
+}
+
+// ─── Customer Blocks Section ──────────────────────────────────────────────────
+
+const DAY_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+function CustomerBlocksSection({ barberId }: { barberId: string }) {
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const { data: blocks, isLoading } = useQuery(
+    trpc.scheduling.listCustomerBlocks.queryOptions({ barberId }),
+  );
+
+  const createMutation = useMutation(
+    trpc.scheduling.createCustomerBlock.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: trpc.scheduling.listCustomerBlocks.queryKey({ barberId }),
+        });
+      },
+    }),
+  );
+
+  const deleteMutation = useMutation(
+    trpc.scheduling.deleteCustomerBlock.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: trpc.scheduling.listCustomerBlocks.queryKey({ barberId }),
+        });
+        setDeleteId(null);
+      },
+    }),
+  );
+
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // List filter
+  const [filterName, setFilterName] = useState("");
+
+  // Form state
+  const [blockMode, setBlockMode] = useState<"weekday" | "date">("weekday");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
+  const [selectedCustomerName, setSelectedCustomerName] = useState<string>("");
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
+  const [blockedDate, setBlockedDate] = useState("");
+  const [reason, setReason] = useState("");
+
+  const debouncedSearch = useDebounce(customerSearch, 300);
+
+  const { data: customers } = useQuery(
+    trpc.admin.listCustomersBasic.queryOptions({ search: debouncedSearch }),
+  );
+
+  const filteredBlocks = blocks?.filter((b) =>
+    filterName
+      ? b.customerName.toLowerCase().includes(filterName.toLowerCase())
+      : true,
+  );
+
+  function toggleDay(day: number) {
+    setSelectedDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
+    );
+  }
+
+  const isFormValid =
+    !!selectedCustomerId &&
+    (blockMode === "weekday" ? selectedDays.length > 0 : !!blockedDate);
+
+  async function handleCreate() {
+    if (!isFormValid) return;
+    if (blockMode === "weekday") {
+      for (const day of selectedDays) {
+        await createMutation.mutateAsync({
+          barberId,
+          customerId: selectedCustomerId,
+          dayOfWeek: day,
+          blockedDate: null,
+          reason: reason || undefined,
+        });
+      }
+    } else {
+      await createMutation.mutateAsync({
+        barberId,
+        customerId: selectedCustomerId,
+        dayOfWeek: null,
+        blockedDate,
+        reason: reason || undefined,
+      });
+    }
+    resetForm();
+    setDialogOpen(false);
+  }
+
+  function resetForm() {
+    setBlockMode("weekday");
+    setCustomerSearch("");
+    setSelectedCustomerId("");
+    setSelectedCustomerName("");
+    setSelectedDays([]);
+    setBlockedDate("");
+    setReason("");
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="text-lg">Bloqueios por cliente</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Impeça que um cliente agende em dias da semana ou datas específicas
+          </p>
+        </div>
+        <Button
+          size="sm"
+          onClick={() => {
+            resetForm();
+            setDialogOpen(true);
+          }}
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Novo bloqueio
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Search filter */}
+        <Input
+          placeholder="Filtrar por cliente..."
+          value={filterName}
+          onChange={(e) => setFilterName(e.target.value)}
+          className="max-w-xs"
+        />
+        {isLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : !filteredBlocks?.length ? (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-8 text-center">
+            <UserX className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
+              {filterName
+                ? "Nenhum bloqueio encontrado para este cliente"
+                : "Nenhum bloqueio por cliente cadastrado"}
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Restrição</TableHead>
+                  <TableHead>Motivo</TableHead>
+                  <TableHead className="w-16">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredBlocks.map((block) => (
+                  <TableRow key={block.id}>
+                    <TableCell className="font-medium">
+                      {block.customerName}
+                    </TableCell>
+                    <TableCell>
+                      {block.dayOfWeek !== null
+                        ? DAY_NAMES[block.dayOfWeek]
+                        : block.blockedDate
+                          ? new Intl.DateTimeFormat("pt-BR").format(
+                              new Date(block.blockedDate + "T12:00:00"),
+                            )
+                          : "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {block.reason ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setDeleteId(block.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+
+      {/* Create Block Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo bloqueio por cliente</DialogTitle>
+            <DialogDescription>
+              Selecione o cliente e defina a restrição de agendamento.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Customer selector */}
+            <div className="space-y-2">
+              <Label>Cliente</Label>
+              <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={customerOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    {selectedCustomerName || "Buscar cliente..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                  <Command>
+                    <CommandInput
+                      placeholder="Nome ou telefone..."
+                      value={customerSearch}
+                      onValueChange={setCustomerSearch}
+                    />
+                    <CommandList>
+                      <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                      <CommandGroup>
+                        {customers?.map((c) => (
+                          <CommandItem
+                            key={c.id}
+                            value={c.id}
+                            onSelect={() => {
+                              setSelectedCustomerId(c.id);
+                              setSelectedCustomerName(c.name);
+                              setCustomerOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                selectedCustomerId === c.id
+                                  ? "opacity-100"
+                                  : "opacity-0",
+                              )}
+                            />
+                            <span>{c.name}</span>
+                            {c.phone && (
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                {c.phone}
+                              </span>
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Mode selector */}
+            <div className="space-y-2">
+              <Label>Tipo de bloqueio</Label>
+              <div className="flex gap-2">
+                {(
+                  [
+                    { value: "weekday", label: "Dia da semana" },
+                    { value: "date", label: "Data específica" },
+                  ] as const
+                ).map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setBlockMode(value)}
+                    className={cn(
+                      "flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                      blockMode === value
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-input bg-background text-foreground hover:bg-muted",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Day of week multi-select */}
+            {blockMode === "weekday" && (
+              <div className="space-y-2">
+                <Label>Dias da semana</Label>
+                <div className="flex flex-wrap gap-2">
+                  {DAY_SHORT.map((name, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => toggleDay(idx)}
+                      className={cn(
+                        "rounded-md border px-3 py-1.5 text-sm font-medium transition-colors",
+                        selectedDays.includes(idx)
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-input bg-background text-foreground hover:bg-muted",
+                      )}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+                {selectedDays.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedDays.length} dia{selectedDays.length > 1 ? "s" : ""}{" "}
+                    selecionado{selectedDays.length > 1 ? "s" : ""}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Specific date */}
+            {blockMode === "date" && (
+              <div className="space-y-2">
+                <Label htmlFor="customer-block-date">Data</Label>
+                <Input
+                  id="customer-block-date"
+                  type="date"
+                  value={blockedDate}
+                  onChange={(e) => setBlockedDate(e.target.value)}
+                />
+              </div>
+            )}
+
+            {/* Reason */}
+            <div className="space-y-2">
+              <Label htmlFor="customer-block-reason">Motivo (opcional)</Label>
+              <Input
+                id="customer-block-reason"
+                placeholder="Ex: Cliente problemático"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </div>
+          </div>
+          {createMutation.error && (
+            <p className="text-sm text-destructive">
+              {createMutation.error.message}
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={!isFormValid || createMutation.isPending}
+              onClick={handleCreate}
+            >
+              {createMutation.isPending ? "Salvando..." : "Criar bloqueio"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDeleteDialog
+        open={!!deleteId}
+        onOpenChange={(open) => !open && setDeleteId(null)}
+        onConfirm={() => deleteId && deleteMutation.mutate({ id: deleteId })}
+        isPending={deleteMutation.isPending}
+      />
+    </Card>
+  );
+}
+
 // ─── Time Blocks Section ──────────────────────────────────────────────────────
 
 function TimeBlocksSection({ barberId }: { barberId: string }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const { data: blocks, isLoading } = useQuery(
     trpc.scheduling.listBarberTimeBlocks.queryOptions({ barberId }),
@@ -377,10 +1004,12 @@ function TimeBlocksSection({ barberId }: { barberId: string }) {
 
   const deleteMutation = useMutation(
     trpc.scheduling.deleteBarberTimeBlock.mutationOptions({
-      onSuccess: () =>
+      onSuccess: () => {
         queryClient.invalidateQueries({
           queryKey: trpc.scheduling.listBarberTimeBlocks.queryKey({ barberId }),
-        }),
+        });
+        setDeleteId(null);
+      },
     }),
   );
 
@@ -466,8 +1095,7 @@ function TimeBlocksSection({ barberId }: { barberId: string }) {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => deleteMutation.mutate({ id: block.id })}
-                        disabled={deleteMutation.isPending}
+                        onClick={() => setDeleteId(block.id)}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
@@ -548,6 +1176,13 @@ function TimeBlocksSection({ barberId }: { barberId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog
+        open={!!deleteId}
+        onOpenChange={(open) => !open && setDeleteId(null)}
+        onConfirm={() => deleteId && deleteMutation.mutate({ id: deleteId })}
+        isPending={deleteMutation.isPending}
+      />
     </Card>
   );
 }

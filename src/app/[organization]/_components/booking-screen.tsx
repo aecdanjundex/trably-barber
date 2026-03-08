@@ -44,6 +44,7 @@ interface Org {
 interface Props {
   org: Org;
   onSignOut: () => void;
+  customerName?: string;
 }
 
 const DAY_NAMES = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -102,7 +103,7 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   },
 };
 
-export function BookingScreen({ org, onSignOut }: Props) {
+export function BookingScreen({ org, onSignOut, customerName }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>("booking");
 
   return viewMode === "appointments" ? (
@@ -116,6 +117,7 @@ export function BookingScreen({ org, onSignOut }: Props) {
       org={org}
       onSignOut={onSignOut}
       onViewAppointments={() => setViewMode("appointments")}
+      customerName={customerName}
     />
   );
 }
@@ -126,6 +128,7 @@ function BookingFlow({
   org,
   onSignOut,
   onViewAppointments,
+  customerName,
 }: Props & { onViewAppointments: () => void }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -308,6 +311,14 @@ function BookingFlow({
       <div className="flex-1 space-y-6 overflow-y-auto px-6 pb-40 pt-6">
         {/* Hero */}
         <div>
+          {customerName && (
+            <p className="mb-1 text-sm text-muted-foreground">
+              Olá,{" "}
+              <span className="font-medium text-foreground">
+                {customerName.split(" ")[0]}
+              </span>
+            </p>
+          )}
           <h2 className="text-2xl font-bold">
             Agende seu <span className="text-amber-400">horário</span>
           </h2>

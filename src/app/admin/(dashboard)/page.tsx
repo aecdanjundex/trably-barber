@@ -41,6 +41,8 @@ const STATUS_MAP: Record<
 > = {
   scheduled: { label: "Agendado", variant: "default" },
   pending_confirmation: { label: "Aguardando confirmação", variant: "outline" },
+  waiting: { label: "Aguardando atendimento", variant: "outline" },
+  in_service: { label: "Em atendimento", variant: "secondary" },
   completed: { label: "Concluído", variant: "secondary" },
   cancelled: { label: "Cancelado", variant: "destructive" },
   "no-show": { label: "Não compareceu", variant: "outline" },
@@ -169,6 +171,12 @@ export default function AdminDashboardPage() {
     trpc.scheduling.updateAppointmentStatus.mutationOptions({
       onSuccess: invalidate,
     }),
+  );
+  const markAsWaiting = useMutation(
+    trpc.scheduling.markAsWaiting.mutationOptions({ onSuccess: invalidate }),
+  );
+  const markAsInService = useMutation(
+    trpc.scheduling.markAsInService.mutationOptions({ onSuccess: invalidate }),
   );
 
   // Group appointments by barber
@@ -308,10 +316,18 @@ export default function AdminDashboardPage() {
                       onUpdateStatus={(status) =>
                         updateStatus.mutate({ appointmentId: apt.id, status })
                       }
+                      onMarkAsWaiting={() =>
+                        markAsWaiting.mutate({ appointmentId: apt.id })
+                      }
+                      onMarkAsInService={() =>
+                        markAsInService.mutate({ appointmentId: apt.id })
+                      }
                       isPending={
                         confirmSqueeze.isPending ||
                         rejectSqueeze.isPending ||
-                        updateStatus.isPending
+                        updateStatus.isPending ||
+                        markAsWaiting.isPending ||
+                        markAsInService.isPending
                       }
                     />
                   ))}
@@ -333,10 +349,18 @@ export default function AdminDashboardPage() {
                 onUpdateStatus={(status) =>
                   updateStatus.mutate({ appointmentId: apt.id, status })
                 }
+                onMarkAsWaiting={() =>
+                  markAsWaiting.mutate({ appointmentId: apt.id })
+                }
+                onMarkAsInService={() =>
+                  markAsInService.mutate({ appointmentId: apt.id })
+                }
                 isPending={
                   confirmSqueeze.isPending ||
                   rejectSqueeze.isPending ||
-                  updateStatus.isPending
+                  updateStatus.isPending ||
+                  markAsWaiting.isPending ||
+                  markAsInService.isPending
                 }
               />
             ))}
@@ -364,6 +388,8 @@ type Apt = {
 type PendingAction =
   | "confirm"
   | "reject"
+  | "waiting"
+  | "in_service"
   | "completed"
   | "cancelled"
   | "no-show"
@@ -383,6 +409,16 @@ const ACTION_LABELS: Record<
     description: "Deseja recusar este encaixe? O cliente será notificado.",
     confirmLabel: "Recusar",
     variant: "destructive",
+  },
+  waiting: {
+    title: "Cliente chegou",
+    description: "Registrar chegada do cliente e colocar na fila de espera?",
+    confirmLabel: "Confirmar chegada",
+  },
+  in_service: {
+    title: "Iniciar atendimento",
+    description: "Deseja colocar este cliente em atendimento?",
+    confirmLabel: "Iniciar",
   },
   completed: {
     title: "Marcar como concluído",
@@ -408,12 +444,16 @@ function AppointmentRow({
   onConfirm,
   onReject,
   onUpdateStatus,
+  onMarkAsWaiting,
+  onMarkAsInService,
   isPending,
 }: {
   apt: Apt;
   onConfirm: () => void;
   onReject: () => void;
   onUpdateStatus: (status: "completed" | "cancelled" | "no-show") => void;
+  onMarkAsWaiting: () => void;
+  onMarkAsInService: () => void;
   isPending: boolean;
 }) {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
@@ -429,6 +469,8 @@ function AppointmentRow({
     if (!pendingAction) return;
     if (pendingAction === "confirm") onConfirm();
     else if (pendingAction === "reject") onReject();
+    else if (pendingAction === "waiting") onMarkAsWaiting();
+    else if (pendingAction === "in_service") onMarkAsInService();
     else onUpdateStatus(pendingAction);
     setPendingAction(null);
   }
@@ -495,7 +537,15 @@ function AppointmentRow({
               </Button>
             </div>
           ) : apt.status === "scheduled" ? (
-            <div className="flex gap-1">
+            <div className="flex flex-wrap gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPendingAction("waiting")}
+                disabled={isPending}
+              >
+                Cliente chegou
+              </Button>
               <Button
                 size="sm"
                 variant="secondary"
@@ -512,6 +562,64 @@ function AppointmentRow({
                 disabled={isPending}
               >
                 Não compareceu
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setPendingAction("cancelled")}
+                disabled={isPending}
+              >
+                <X className="mr-1 h-3.5 w-3.5" />
+                Cancelar
+              </Button>
+            </div>
+          ) : apt.status === "waiting" ? (
+            <div className="flex flex-wrap gap-1">
+              <Button
+                size="sm"
+                onClick={() => setPendingAction("in_service")}
+                disabled={isPending}
+              >
+                <Scissors className="mr-1 h-3.5 w-3.5" />
+                Em atendimento
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setPendingAction("completed")}
+                disabled={isPending}
+              >
+                <Check className="mr-1 h-3.5 w-3.5" />
+                Concluído
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPendingAction("no-show")}
+                disabled={isPending}
+              >
+                Não compareceu
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setPendingAction("cancelled")}
+                disabled={isPending}
+              >
+                <X className="mr-1 h-3.5 w-3.5" />
+                Cancelar
+              </Button>
+            </div>
+          ) : apt.status === "in_service" ? (
+            <div className="flex flex-wrap gap-1">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setPendingAction("completed")}
+                disabled={isPending}
+              >
+                <Check className="mr-1 h-3.5 w-3.5" />
+                Concluído
               </Button>
               <Button
                 size="sm"

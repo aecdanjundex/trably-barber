@@ -10,7 +10,7 @@ import type {
 
 interface IAdminService {
   // Services
-  listServices(orgId: string): Promise<Service[]>;
+  listServices(orgId: string, search?: string): Promise<Service[]>;
   createService(orgId: string, input: CreateServiceInput): Promise<Service>;
   updateService(
     orgId: string,
@@ -19,7 +19,7 @@ interface IAdminService {
   deleteService(orgId: string, id: string): Promise<void>;
 
   // Customers
-  listCustomers(orgId: string): Promise<Customer[]>;
+  listCustomers(orgId: string, search?: string): Promise<Customer[]>;
   createCustomer(orgId: string, input: CreateCustomerInput): Promise<Customer>;
   updateCustomer(
     orgId: string,

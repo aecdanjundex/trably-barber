@@ -1,6 +1,6 @@
 import "server-only";
 import { inject, injectable } from "inversify";
-import { eq, and, count, gte, lte, lt, desc, sql } from "drizzle-orm";
+import { eq, and, count, gte, lte, lt, desc, sql, ilike } from "drizzle-orm";
 import type { Database } from "@/lib/db";
 import { TYPES } from "@/lib/di/types";
 import {
@@ -28,11 +28,13 @@ class AdminRepository implements IAdminRepository {
 
   // ─── Services ────────────────────────────────────────────────────────────────
 
-  async listServices(orgId: string) {
+  async listServices(orgId: string, search?: string) {
+    const conditions = [eq(service.organizationId, orgId)];
+    if (search) conditions.push(ilike(service.name, `%${search}%`));
     return this.db
       .select()
       .from(service)
-      .where(eq(service.organizationId, orgId))
+      .where(and(...conditions))
       .orderBy(service.name);
   }
 
@@ -82,12 +84,15 @@ class AdminRepository implements IAdminRepository {
 
   // ─── Customers ───────────────────────────────────────────────────────────────
 
-  async listCustomers(orgId: string) {
+  async listCustomers(orgId: string, search?: string) {
+    const conditions = [eq(customer.organizationId, orgId)];
+    if (search) conditions.push(ilike(customer.name, `%${search}%`));
     return this.db
       .select()
       .from(customer)
-      .where(eq(customer.organizationId, orgId))
-      .orderBy(desc(customer.createdAt));
+      .where(and(...conditions))
+      .orderBy(customer.name)
+      .limit(50);
   }
 
   async createCustomer(orgId: string, input: CreateCustomerInput) {
@@ -174,6 +179,7 @@ class AdminRepository implements IAdminRepository {
         status: appointment.status,
         type: appointment.type,
         notes: appointment.notes,
+        arrivedAt: appointment.arrivedAt,
         createdAt: appointment.createdAt,
         updatedAt: appointment.updatedAt,
         customerName: customer.name,

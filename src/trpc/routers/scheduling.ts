@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTRPCRouter, orgProcedure, orgAdminProcedure } from "@/trpc/init";
+import { createTRPCRouter, orgProcedure, orgAdminProcedure, publicProcedure } from "@/trpc/init";
 import { container } from "@/lib/di/container";
 import { TYPES } from "@/lib/di/types";
 import type { ISchedulingService } from "@/domains/scheduling/interfaces/scheduling.service.interface";
@@ -7,9 +7,11 @@ import {
   upsertScheduleConfigSchema,
   deleteScheduleConfigSchema,
   createBarberTimeBlockSchema,
+  createBarberDailyBlockSchema,
   createCustomerBlockSchema,
   appointmentIdSchema,
   updateAppointmentStatusSchema,
+  createAppointmentForCustomerSchema,
 } from "@/domains/scheduling/schemas/scheduling.schema";
 import { ORG_ROLES } from "@/lib/permissions";
 
@@ -71,6 +73,33 @@ export const schedulingRouter = createTRPCRouter({
       getService().deleteBarberTimeBlock(ctx.orgId, input.id),
     ),
 
+  // ─── Barber Daily Blocks ──────────────────────────────────────────────────
+
+  listBarberDailyBlocks: orgProcedure
+    .input(z.object({ barberId: z.string().optional() }).optional())
+    .query(({ ctx, input }) => {
+      const barberId =
+        ctx.memberRole === ORG_ROLES.BARBER ? ctx.user.id : input?.barberId;
+      return getService().listBarberDailyBlocks(ctx.orgId, barberId);
+    }),
+
+  createBarberDailyBlock: orgProcedure
+    .input(createBarberDailyBlockSchema)
+    .mutation(({ ctx, input }) => {
+      const barberId =
+        ctx.memberRole === ORG_ROLES.BARBER ? ctx.user.id : input.barberId;
+      return getService().createBarberDailyBlock(ctx.orgId, {
+        ...input,
+        barberId,
+      });
+    }),
+
+  deleteBarberDailyBlock: orgProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(({ ctx, input }) =>
+      getService().deleteBarberDailyBlock(ctx.orgId, input.id),
+    ),
+
   // ─── Customer Blocks ─────────────────────────────────────────────────────
 
   listCustomerBlocks: orgProcedure
@@ -98,6 +127,40 @@ export const schedulingRouter = createTRPCRouter({
       getService().deleteCustomerBlock(ctx.orgId, input.id),
     ),
 
+  // ─── Org Member Booking ──────────────────────────────────────────────────
+
+  getAvailableSlotsForOrg: orgProcedure
+    .input(
+      z.object({
+        barberId: z.string(),
+        date: z.string(),
+        serviceId: z.string(),
+      }),
+    )
+    .query(({ ctx, input }) => {
+      const barberId =
+        ctx.memberRole === ORG_ROLES.BARBER ? ctx.user.id : input.barberId;
+      return getService().getAvailableSlots(
+        ctx.orgId,
+        barberId,
+        input.date,
+        input.serviceId,
+      );
+    }),
+
+  createAppointmentForCustomer: orgProcedure
+    .input(createAppointmentForCustomerSchema)
+    .mutation(({ ctx, input }) => {
+      const barberId =
+        ctx.memberRole === ORG_ROLES.BARBER ? ctx.user.id : input.barberId;
+      return getService().createAppointment(ctx.orgId, input.customerId, {
+        barberId,
+        serviceId: input.serviceId,
+        startsAt: input.startsAt,
+        notes: input.notes,
+      });
+    }),
+
   // ─── Squeeze-in Management ───────────────────────────────────────────────
 
   confirmSqueezeIn: orgProcedure
@@ -123,6 +186,28 @@ export const schedulingRouter = createTRPCRouter({
         input.status,
       ),
     ),
+
+  markAsWaiting: orgProcedure
+    .input(appointmentIdSchema)
+    .mutation(({ ctx, input }) =>
+      getService().markAsWaiting(ctx.orgId, input.appointmentId),
+    ),
+
+  markAsInService: orgProcedure
+    .input(appointmentIdSchema)
+    .mutation(({ ctx, input }) =>
+      getService().markAsInService(ctx.orgId, input.appointmentId),
+    ),
+
+  callCustomer: orgProcedure
+    .input(appointmentIdSchema)
+    .mutation(({ ctx, input }) =>
+      getService().callCustomer(ctx.orgId, input.appointmentId),
+    ),
+
+  getLatestCall: publicProcedure
+    .input(z.object({ orgSlug: z.string() }))
+    .query(({ input }) => getService().getLatestCall(input.orgSlug)),
 
   // ─── Appointment Stats ───────────────────────────────────────────────────
 

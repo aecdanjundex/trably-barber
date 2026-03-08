@@ -1,12 +1,14 @@
 import type {
   ScheduleConfig,
   BarberTimeBlock,
+  BarberDailyBlock,
   CustomerBlock,
   Appointment,
 } from "../types";
 import type {
   UpsertScheduleConfigInput,
   CreateBarberTimeBlockInput,
+  CreateBarberDailyBlockInput,
   CreateCustomerBlockInput,
 } from "../schemas/scheduling.schema";
 
@@ -52,6 +54,23 @@ interface ISchedulingRepository {
     dateEnd: Date,
   ): Promise<BarberTimeBlock[]>;
 
+  // ─── Barber Daily Blocks ──────────────────────────────────────────────────
+  listBarberDailyBlocks(
+    orgId: string,
+    barberId?: string,
+  ): Promise<BarberDailyBlock[]>;
+
+  createBarberDailyBlock(
+    orgId: string,
+    input: CreateBarberDailyBlockInput,
+  ): Promise<BarberDailyBlock>;
+
+  deleteBarberDailyBlock(orgId: string, id: string): Promise<void>;
+
+  getBarberDailyBlocks(
+    barberId: string,
+  ): Promise<{ startTime: string; endTime: string }[]>;
+
   // ─── Customer Blocks ─────────────────────────────────────────────────────
   listCustomerBlocks(
     orgId: string,
@@ -73,6 +92,11 @@ interface ISchedulingRepository {
     dayOfWeek: number,
     dateStr: string,
   ): Promise<boolean>;
+
+  getCustomerDailyTimeBlocks(
+    barberId: string,
+    customerId: string,
+  ): Promise<{ startTime: string | null; endTime: string | null }[]>;
 
   // ─── Appointments ────────────────────────────────────────────────────────
   getAppointmentsForBarberOnDate(
@@ -100,6 +124,18 @@ interface ISchedulingRepository {
     id: string,
     status: string,
   ): Promise<Appointment | null>;
+
+  markAsWaiting(orgId: string, id: string): Promise<Appointment | null>;
+
+  markAsInService(orgId: string, id: string): Promise<Appointment | null>;
+
+  callCustomer(orgId: string, id: string): Promise<Appointment | null>;
+
+  getLatestCall(orgId: string): Promise<{
+    appointmentId: string;
+    customerName: string;
+    barberName: string;
+  } | null>;
 
   // ─── Lookups ─────────────────────────────────────────────────────────────
   getServiceById(id: string): Promise<{

@@ -1,11 +1,12 @@
 import "server-only";
 import { inject, injectable } from "inversify";
-import { eq, and, lt, gt, or, desc, notInArray, gte, lte, count, sql } from "drizzle-orm";
+import { eq, and, lt, gt, or, desc, notInArray, gte, lte, count, sql, isNull } from "drizzle-orm";
 import type { Database } from "@/lib/db";
 import { TYPES } from "@/lib/di/types";
 import {
   scheduleConfig,
   barberTimeBlock,
+  barberDailyBlock,
   customerBlock,
   appointment,
   service,
@@ -17,6 +18,7 @@ import type { ISchedulingRepository } from "../interfaces/scheduling.repository.
 import type {
   UpsertScheduleConfigInput,
   CreateBarberTimeBlockInput,
+  CreateBarberDailyBlockInput,
   CreateCustomerBlockInput,
 } from "../schemas/scheduling.schema";
 
@@ -157,6 +159,56 @@ class SchedulingRepository implements ISchedulingRepository {
       );
   }
 
+  // ─── Barber Daily Blocks ──────────────────────────────────────────────────
+
+  async listBarberDailyBlocks(orgId: string, barberId?: string) {
+    const conditions = [eq(barberDailyBlock.organizationId, orgId)];
+    if (barberId) conditions.push(eq(barberDailyBlock.barberId, barberId));
+
+    return this.db
+      .select()
+      .from(barberDailyBlock)
+      .where(and(...conditions))
+      .orderBy(barberDailyBlock.startTime);
+  }
+
+  async createBarberDailyBlock(orgId: string, input: CreateBarberDailyBlockInput) {
+    const rows = await this.db
+      .insert(barberDailyBlock)
+      .values({
+        id: crypto.randomUUID(),
+        organizationId: orgId,
+        barberId: input.barberId,
+        startTime: input.startTime,
+        endTime: input.endTime,
+        reason: input.reason,
+        createdAt: new Date(),
+      })
+      .returning();
+    return rows[0];
+  }
+
+  async deleteBarberDailyBlock(orgId: string, id: string) {
+    await this.db
+      .delete(barberDailyBlock)
+      .where(
+        and(
+          eq(barberDailyBlock.id, id),
+          eq(barberDailyBlock.organizationId, orgId),
+        ),
+      );
+  }
+
+  async getBarberDailyBlocks(barberId: string) {
+    return this.db
+      .select({
+        startTime: barberDailyBlock.startTime,
+        endTime: barberDailyBlock.endTime,
+      })
+      .from(barberDailyBlock)
+      .where(eq(barberDailyBlock.barberId, barberId));
+  }
+
   // ─── Customer Blocks ──────────────────────────────────────────────────────
 
   async listCustomerBlocks(orgId: string, barberId?: string) {
@@ -171,6 +223,8 @@ class SchedulingRepository implements ISchedulingRepository {
         customerId: customerBlock.customerId,
         dayOfWeek: customerBlock.dayOfWeek,
         blockedDate: customerBlock.blockedDate,
+        startTime: customerBlock.startTime,
+        endTime: customerBlock.endTime,
         reason: customerBlock.reason,
         createdAt: customerBlock.createdAt,
         customerName: customer.name,
@@ -192,6 +246,8 @@ class SchedulingRepository implements ISchedulingRepository {
         customerId: input.customerId,
         dayOfWeek: input.dayOfWeek,
         blockedDate: input.blockedDate,
+        startTime: input.startTime ?? null,
+        endTime: input.endTime ?? null,
         reason: input.reason,
         createdAt: new Date(),
       })
@@ -228,6 +284,23 @@ class SchedulingRepository implements ISchedulingRepository {
       )
       .limit(1);
     return rows.length > 0;
+  }
+
+  async getCustomerDailyTimeBlocks(barberId: string, customerId: string) {
+    return this.db
+      .select({
+        startTime: customerBlock.startTime,
+        endTime: customerBlock.endTime,
+      })
+      .from(customerBlock)
+      .where(
+        and(
+          eq(customerBlock.barberId, barberId),
+          eq(customerBlock.customerId, customerId),
+          isNull(customerBlock.dayOfWeek),
+          isNull(customerBlock.blockedDate),
+        ),
+      );
   }
 
   // ─── Appointments ─────────────────────────────────────────────────────────
@@ -297,6 +370,58 @@ class SchedulingRepository implements ISchedulingRepository {
       .set({ status, updatedAt: new Date() })
       .where(and(eq(appointment.id, id), eq(appointment.organizationId, orgId)))
       .returning();
+    return rows[0] ?? null;
+  }
+
+  async markAsWaiting(orgId: string, id: string) {
+    const now = new Date();
+    const rows = await this.db
+      .update(appointment)
+      .set({ status: "waiting", arrivedAt: now, updatedAt: now })
+      .where(and(eq(appointment.id, id), eq(appointment.organizationId, orgId)))
+      .returning();
+    return rows[0] ?? null;
+  }
+
+  async markAsInService(orgId: string, id: string) {
+    const now = new Date();
+    const rows = await this.db
+      .update(appointment)
+      .set({ status: "in_service", updatedAt: now })
+      .where(and(eq(appointment.id, id), eq(appointment.organizationId, orgId)))
+      .returning();
+    return rows[0] ?? null;
+  }
+
+  async callCustomer(orgId: string, id: string) {
+    const now = new Date();
+    const rows = await this.db
+      .update(appointment)
+      .set({ calledAt: now, updatedAt: now })
+      .where(and(eq(appointment.id, id), eq(appointment.organizationId, orgId)))
+      .returning();
+    return rows[0] ?? null;
+  }
+
+  async getLatestCall(orgId: string) {
+    const threshold = new Date(Date.now() - 60_000);
+    const rows = await this.db
+      .select({
+        appointmentId: appointment.id,
+        customerName: customer.name,
+        barberName: user.name,
+      })
+      .from(appointment)
+      .innerJoin(customer, eq(appointment.customerId, customer.id))
+      .innerJoin(user, eq(appointment.barberId, user.id))
+      .where(
+        and(
+          eq(appointment.organizationId, orgId),
+          gte(appointment.calledAt, threshold),
+        ),
+      )
+      .orderBy(desc(appointment.calledAt))
+      .limit(1);
     return rows[0] ?? null;
   }
 
@@ -447,6 +572,8 @@ class SchedulingRepository implements ISchedulingRepository {
         status: appointment.status,
         type: appointment.type,
         notes: appointment.notes,
+        arrivedAt: appointment.arrivedAt,
+        calledAt: appointment.calledAt,
         createdAt: appointment.createdAt,
         updatedAt: appointment.updatedAt,
         barberName: user.name,

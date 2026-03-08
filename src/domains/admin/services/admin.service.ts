@@ -19,8 +19,8 @@ class AdminService implements IAdminService {
     private readonly repository: IAdminRepository,
   ) {}
 
-  async listServices(orgId: string) {
-    return this.repository.listServices(orgId);
+  async listServices(orgId: string, search?: string) {
+    return this.repository.listServices(orgId, search);
   }
 
   async createService(orgId: string, input: CreateServiceInput) {
@@ -35,8 +35,8 @@ class AdminService implements IAdminService {
     return this.repository.deleteService(orgId, id);
   }
 
-  async listCustomers(orgId: string) {
-    return this.repository.listCustomers(orgId);
+  async listCustomers(orgId: string, search?: string) {
+    return this.repository.listCustomers(orgId, search);
   }
 
   async createCustomer(orgId: string, input: CreateCustomerInput) {

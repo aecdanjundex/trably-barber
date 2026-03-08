@@ -10,7 +10,7 @@ import type {
 
 interface IAdminRepository {
   // Services
-  listServices(orgId: string): Promise<Service[]>;
+  listServices(orgId: string, search?: string): Promise<Service[]>;
   getService(orgId: string, id: string): Promise<Service | null>;
   createService(orgId: string, input: CreateServiceInput): Promise<Service>;
   updateService(
@@ -20,7 +20,7 @@ interface IAdminRepository {
   deleteService(orgId: string, id: string): Promise<void>;
 
   // Customers
-  listCustomers(orgId: string): Promise<Customer[]>;
+  listCustomers(orgId: string, search?: string): Promise<Customer[]>;
   createCustomer(orgId: string, input: CreateCustomerInput): Promise<Customer>;
   updateCustomer(
     orgId: string,

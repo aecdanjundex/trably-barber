@@ -215,6 +215,10 @@ export const appointment = pgTable("appointment", {
   /** Scheduled end time */
   endsAt: timestamp("ends_at").notNull(),
   status: text("status").notNull().default("scheduled"),
+  /** When the customer arrived at the barbershop (set when status = "waiting") */
+  arrivedAt: timestamp("arrived_at"),
+  /** When the customer was last called to the chair (panel display trigger) */
+  calledAt: timestamp("called_at"),
   /** "regular" | "squeeze_in" */
   type: text("type").notNull().default("regular"),
   notes: text("notes"),
@@ -277,6 +281,31 @@ export const barberTimeBlock = pgTable(
 );
 
 /**
+ * Barber daily time blocks — recurring daily intervals when a barber is
+ * unavailable (e.g. lunch break 12:00–14:00). Applied every day regardless
+ * of day of week or date.
+ */
+export const barberDailyBlock = pgTable(
+  "barber_daily_block",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    barberId: text("barber_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** Start of blocked interval as "HH:mm" */
+    startTime: text("start_time").notNull(),
+    /** End of blocked interval as "HH:mm" */
+    endTime: text("end_time").notNull(),
+    reason: text("reason"),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (t) => [index("barber_daily_block_barber_idx").on(t.barberId)],
+);
+
+/**
  * Customer blocks — prevent a specific customer from booking with a barber
  * on a certain day of week or specific date. Hidden from the customer.
  */
@@ -297,6 +326,10 @@ export const customerBlock = pgTable(
     dayOfWeek: integer("day_of_week"),
     /** Specific date block as "YYYY-MM-DD", or null */
     blockedDate: text("blocked_date"),
+    /** Daily time-interval block: start time as "HH:mm", or null */
+    startTime: text("start_time"),
+    /** Daily time-interval block: end time as "HH:mm", or null */
+    endTime: text("end_time"),
     reason: text("reason"),
     createdAt: timestamp("created_at").notNull(),
   },

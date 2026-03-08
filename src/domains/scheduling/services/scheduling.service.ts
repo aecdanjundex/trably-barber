@@ -7,6 +7,7 @@ import type { ISchedulingService } from "../interfaces/scheduling.service.interf
 import type {
   UpsertScheduleConfigInput,
   CreateBarberTimeBlockInput,
+  CreateBarberDailyBlockInput,
   CreateCustomerBlockInput,
   CreateAppointmentInput,
   RequestSqueezeInInput,
@@ -54,6 +55,23 @@ class SchedulingService implements ISchedulingService {
     return this.repo.deleteBarberTimeBlock(orgId, id);
   }
 
+  // ─── Barber Daily Blocks ───────────────────────────────────────────────────
+
+  async listBarberDailyBlocks(orgId: string, barberId?: string) {
+    return this.repo.listBarberDailyBlocks(orgId, barberId);
+  }
+
+  async createBarberDailyBlock(
+    orgId: string,
+    input: CreateBarberDailyBlockInput,
+  ) {
+    return this.repo.createBarberDailyBlock(orgId, input);
+  }
+
+  async deleteBarberDailyBlock(orgId: string, id: string) {
+    return this.repo.deleteBarberDailyBlock(orgId, id);
+  }
+
   // ─── Customer Blocks ──────────────────────────────────────────────────────
 
   async listCustomerBlocks(orgId: string, barberId?: string) {
@@ -89,6 +107,7 @@ class SchedulingService implements ISchedulingService {
     if (!svc || !svc.active) return [];
 
     // 3. Customer block check
+    let customerTimeBlocks: { startTime: string | null; endTime: string | null }[] = [];
     if (customerId) {
       const blocked = await this.repo.isCustomerBlocked(
         barberId,
@@ -97,6 +116,11 @@ class SchedulingService implements ISchedulingService {
         dateStr,
       );
       if (blocked) return [];
+
+      customerTimeBlocks = await this.repo.getCustomerDailyTimeBlocks(
+        barberId,
+        customerId,
+      );
     }
 
     // 4. Generate slot grid
@@ -127,12 +151,15 @@ class SchedulingService implements ISchedulingService {
       dateEnd,
     );
 
-    // 6. Time blocks
+    // 6. Time blocks (date-specific)
     const blocks = await this.repo.getBarberTimeBlocksForDate(
       barberId,
       dateStart,
       dateEnd,
     );
+
+    // 6b. Barber daily recurring blocks
+    const dailyBlocks = await this.repo.getBarberDailyBlocks(barberId);
 
     // 7. Filter available
     const available = slots.filter((slot) => {
@@ -159,6 +186,29 @@ class SchedulingService implements ISchedulingService {
       // Check time block conflicts
       for (const block of blocks) {
         if (slotStart < block.endsAt && slotEnd > block.startsAt) {
+          return false;
+        }
+      }
+
+      // Check barber daily recurring blocks
+      for (const db of dailyBlocks) {
+        const [sh, sm] = db.startTime.split(":").map(Number);
+        const [eh, em] = db.endTime.split(":").map(Number);
+        const blockStartMin = sh * 60 + sm;
+        const blockEndMin = eh * 60 + em;
+        if (slot.startMin < blockEndMin && slot.endMin > blockStartMin) {
+          return false;
+        }
+      }
+
+      // Check customer daily time-interval blocks
+      for (const tb of customerTimeBlocks) {
+        if (!tb.startTime || !tb.endTime) continue;
+        const [sh, sm] = tb.startTime.split(":").map(Number);
+        const [eh, em] = tb.endTime.split(":").map(Number);
+        const blockStartMin = sh * 60 + sm;
+        const blockEndMin = eh * 60 + em;
+        if (slot.startMin < blockEndMin && slot.endMin > blockStartMin) {
           return false;
         }
       }
@@ -368,6 +418,24 @@ class SchedulingService implements ISchedulingService {
     status: string,
   ) {
     return this.repo.updateAppointmentStatus(orgId, appointmentId, status);
+  }
+
+  async markAsWaiting(orgId: string, appointmentId: string) {
+    return this.repo.markAsWaiting(orgId, appointmentId);
+  }
+
+  async markAsInService(orgId: string, appointmentId: string) {
+    return this.repo.markAsInService(orgId, appointmentId);
+  }
+
+  async callCustomer(orgId: string, appointmentId: string) {
+    return this.repo.callCustomer(orgId, appointmentId);
+  }
+
+  async getLatestCall(orgSlug: string) {
+    const org = await this.repo.getOrgBySlug(orgSlug);
+    if (!org) return null;
+    return this.repo.getLatestCall(org.id);
   }
 
   async listCustomerAppointments(orgId: string, customerId: string) {

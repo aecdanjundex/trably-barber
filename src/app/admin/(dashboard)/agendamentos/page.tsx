@@ -9,6 +9,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Plus,
+  ChevronsUpDown,
 } from "lucide-react";
 import {
   Table,
@@ -28,15 +30,43 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
+import { useDebounce } from "@/hooks/use-debounce";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -49,6 +79,8 @@ const STATUS_MAP: Record<
 > = {
   scheduled: { label: "Agendado", variant: "default" },
   pending_confirmation: { label: "Aguardando confirmação", variant: "outline" },
+  waiting: { label: "Aguardando atendimento", variant: "outline" },
+  in_service: { label: "Em atendimento", variant: "secondary" },
   completed: { label: "Concluído", variant: "secondary" },
   cancelled: { label: "Cancelado", variant: "destructive" },
   "no-show": { label: "Não compareceu", variant: "outline" },
@@ -72,6 +104,7 @@ const MONTH_NAMES = [
 const DAY_ABBR = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 const ORG_ADMIN_ROLES = ["owner", "admin"];
+const ORG_BARBER_ROLES = ["owner", "admin", "barber"];
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -158,6 +191,7 @@ export default function AgendamentosPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<SelectedPeriod | null>(
     null,
   );
+  const [newAppointmentOpen, setNewAppointmentOpen] = useState(false);
 
   const { data: activeMember } = useQuery({
     queryKey: ["active-member-agendamentos"],
@@ -168,14 +202,23 @@ export default function AgendamentosPage() {
   });
 
   const isAdmin = ORG_ADMIN_ROLES.includes(activeMember?.role ?? "");
+  const canBook = ORG_BARBER_ROLES.includes(activeMember?.role ?? "");
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Agendamentos</h1>
-        <p className="text-muted-foreground">
-          Acompanhe todos os agendamentos da sua barbearia
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Agendamentos</h1>
+          <p className="text-muted-foreground">
+            Acompanhe todos os agendamentos da sua barbearia
+          </p>
+        </div>
+        {canBook && (
+          <Button onClick={() => setNewAppointmentOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Novo Agendamento
+          </Button>
+        )}
       </div>
 
       <Tabs defaultValue="semana">
@@ -201,6 +244,14 @@ export default function AgendamentosPage() {
       <PeriodDetailDialog
         period={selectedPeriod}
         onClose={() => setSelectedPeriod(null)}
+      />
+
+      <NewAppointmentDialog
+        open={newAppointmentOpen}
+        onClose={() => setNewAppointmentOpen(false)}
+        isAdmin={isAdmin}
+        currentUserId={activeMember?.userId ?? ""}
+        currentRole={activeMember?.role ?? ""}
       />
     </div>
   );
@@ -243,6 +294,15 @@ function PeriodDetailDialog({
       onSuccess: invalidate,
     }),
   );
+  const markAsWaiting = useMutation(
+    trpc.scheduling.markAsWaiting.mutationOptions({ onSuccess: invalidate }),
+  );
+
+  const isPending =
+    confirmSqueeze.isPending ||
+    rejectSqueeze.isPending ||
+    updateStatus.isPending ||
+    markAsWaiting.isPending;
 
   return (
     <Dialog open={!!period} onOpenChange={(open) => !open && onClose()}>
@@ -274,92 +334,649 @@ function PeriodDetailDialog({
                   <TableHead>Barbeiro</TableHead>
                   <TableHead>Data/Hora</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="w-36">Ações</TableHead>
+                  <TableHead>Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {appointments.map((apt) => {
-                  const status = STATUS_MAP[apt.status] ?? {
-                    label: apt.status,
-                    variant: "outline" as const,
-                  };
-                  const isPendingSqueeze =
-                    apt.type === "squeeze_in" &&
-                    apt.status === "pending_confirmation";
-                  return (
-                    <TableRow key={apt.id}>
-                      <TableCell>
-                        <div className="font-medium">{apt.customerName}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {apt.customerPhone}
-                        </div>
-                      </TableCell>
-                      <TableCell>{apt.serviceName}</TableCell>
-                      <TableCell>{apt.barberName}</TableCell>
-                      <TableCell>{formatDateTime(apt.startsAt)}</TableCell>
-                      <TableCell>
-                        <Badge variant={status.variant}>{status.label}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        {isPendingSqueeze ? (
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() =>
-                                confirmSqueeze.mutate({ appointmentId: apt.id })
-                              }
-                              disabled={confirmSqueeze.isPending}
-                            >
-                              <Check className="h-4 w-4 text-green-600" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() =>
-                                rejectSqueeze.mutate({ appointmentId: apt.id })
-                              }
-                              disabled={rejectSqueeze.isPending}
-                            >
-                              <X className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        ) : apt.status === "scheduled" ? (
-                          <Select
-                            onValueChange={(val) =>
-                              updateStatus.mutate({
-                                appointmentId: apt.id,
-                                status: val as
-                                  | "completed"
-                                  | "cancelled"
-                                  | "no-show",
-                              })
-                            }
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Atualizar" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="completed">
-                                Concluído
-                              </SelectItem>
-                              <SelectItem value="cancelled">
-                                Cancelado
-                              </SelectItem>
-                              <SelectItem value="no-show">
-                                Não compareceu
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : null}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                {appointments.map((apt) => (
+                  <AptTableRow
+                    key={apt.id}
+                    apt={apt}
+                    isPending={isPending}
+                    onConfirm={() =>
+                      confirmSqueeze.mutate({ appointmentId: apt.id })
+                    }
+                    onReject={() =>
+                      rejectSqueeze.mutate({ appointmentId: apt.id })
+                    }
+                    onUpdateStatus={(status) =>
+                      updateStatus.mutate({ appointmentId: apt.id, status })
+                    }
+                    onMarkAsWaiting={() =>
+                      markAsWaiting.mutate({ appointmentId: apt.id })
+                    }
+                  />
+                ))}
               </TableBody>
             </Table>
           </div>
         )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Apt Table Row ────────────────────────────────────────────────────────────
+
+type AptTableRowPendingAction =
+  | "confirm"
+  | "reject"
+  | "waiting"
+  | "completed"
+  | "cancelled"
+  | "no-show"
+  | null;
+
+const APT_TABLE_ACTION_LABELS: Record<
+  NonNullable<AptTableRowPendingAction>,
+  { title: string; description: string; confirmLabel: string; variant?: "destructive" }
+> = {
+  confirm: {
+    title: "Confirmar encaixe",
+    description: "Deseja confirmar este encaixe?",
+    confirmLabel: "Confirmar",
+  },
+  reject: {
+    title: "Recusar encaixe",
+    description: "Deseja recusar este encaixe?",
+    confirmLabel: "Recusar",
+    variant: "destructive",
+  },
+  waiting: {
+    title: "Cliente chegou",
+    description: "Registrar chegada do cliente e colocar na fila de espera?",
+    confirmLabel: "Confirmar chegada",
+  },
+  completed: {
+    title: "Marcar como concluído",
+    description: "Deseja marcar este agendamento como concluído?",
+    confirmLabel: "Concluído",
+  },
+  "no-show": {
+    title: "Marcar como não compareceu",
+    description: "Deseja marcar que o cliente não compareceu?",
+    confirmLabel: "Confirmar",
+    variant: "destructive",
+  },
+  cancelled: {
+    title: "Cancelar agendamento",
+    description: "Deseja cancelar este agendamento?",
+    confirmLabel: "Cancelar",
+    variant: "destructive",
+  },
+};
+
+function AptTableRow({
+  apt,
+  isPending,
+  onConfirm,
+  onReject,
+  onUpdateStatus,
+  onMarkAsWaiting,
+}: {
+  apt: {
+    id: string;
+    status: string;
+    type: string;
+    startsAt: Date;
+    customerName: string;
+    customerPhone: string;
+    serviceName: string;
+    barberName: string;
+  };
+  isPending: boolean;
+  onConfirm: () => void;
+  onReject: () => void;
+  onUpdateStatus: (status: "completed" | "cancelled" | "no-show") => void;
+  onMarkAsWaiting: () => void;
+}) {
+  const [pendingAction, setPendingAction] =
+    useState<AptTableRowPendingAction>(null);
+
+  const statusEntry = STATUS_MAP[apt.status] ?? {
+    label: apt.status,
+    variant: "outline" as const,
+  };
+  const isPendingSqueeze =
+    apt.type === "squeeze_in" && apt.status === "pending_confirmation";
+  const actionInfo = pendingAction ? APT_TABLE_ACTION_LABELS[pendingAction] : null;
+
+  function handleConfirm() {
+    if (!pendingAction) return;
+    if (pendingAction === "confirm") onConfirm();
+    else if (pendingAction === "reject") onReject();
+    else if (pendingAction === "waiting") onMarkAsWaiting();
+    else onUpdateStatus(pendingAction);
+    setPendingAction(null);
+  }
+
+  return (
+    <>
+      <AlertDialog
+        open={!!pendingAction}
+        onOpenChange={(open) => { if (!open) setPendingAction(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{actionInfo?.title}</AlertDialogTitle>
+            <AlertDialogDescription>{actionInfo?.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              variant={actionInfo?.variant ?? "default"}
+              onClick={handleConfirm}
+            >
+              {actionInfo?.confirmLabel}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <TableRow>
+        <TableCell>
+          <div className="font-medium">{apt.customerName}</div>
+          <div className="text-xs text-muted-foreground">{apt.customerPhone}</div>
+        </TableCell>
+        <TableCell>{apt.serviceName}</TableCell>
+        <TableCell>{apt.barberName}</TableCell>
+        <TableCell>{formatDateTime(apt.startsAt)}</TableCell>
+        <TableCell>
+          <Badge variant={statusEntry.variant}>{statusEntry.label}</Badge>
+        </TableCell>
+        <TableCell>
+          {isPendingSqueeze ? (
+            <div className="flex gap-1">
+              <Button
+                size="sm"
+                onClick={() => setPendingAction("confirm")}
+                disabled={isPending}
+              >
+                <Check className="mr-1 h-3.5 w-3.5" />
+                Confirmar
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setPendingAction("reject")}
+                disabled={isPending}
+              >
+                <X className="mr-1 h-3.5 w-3.5" />
+                Recusar
+              </Button>
+            </div>
+          ) : apt.status === "scheduled" ? (
+            <div className="flex flex-wrap gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPendingAction("waiting")}
+                disabled={isPending}
+              >
+                Cliente chegou
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setPendingAction("completed")}
+                disabled={isPending}
+              >
+                <Check className="mr-1 h-3.5 w-3.5" />
+                Concluído
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPendingAction("no-show")}
+                disabled={isPending}
+              >
+                Não compareceu
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setPendingAction("cancelled")}
+                disabled={isPending}
+              >
+                <X className="mr-1 h-3.5 w-3.5" />
+                Cancelar
+              </Button>
+            </div>
+          ) : apt.status === "waiting" ? (
+            <div className="flex flex-wrap gap-1">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setPendingAction("completed")}
+                disabled={isPending}
+              >
+                <Check className="mr-1 h-3.5 w-3.5" />
+                Concluído
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPendingAction("no-show")}
+                disabled={isPending}
+              >
+                Não compareceu
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setPendingAction("cancelled")}
+                disabled={isPending}
+              >
+                <X className="mr-1 h-3.5 w-3.5" />
+                Cancelar
+              </Button>
+            </div>
+          ) : null}
+        </TableCell>
+      </TableRow>
+    </>
+  );
+}
+
+// ─── New Appointment Dialog ───────────────────────────────────────────────────
+
+function NewAppointmentDialog({
+  open,
+  onClose,
+  isAdmin,
+  currentUserId,
+  currentRole,
+}: {
+  open: boolean;
+  onClose: () => void;
+  isAdmin: boolean;
+  currentUserId: string;
+  currentRole: string;
+}) {
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+
+  const [customerId, setCustomerId] = useState("");
+  const [barberId, setBarberId] = useState("");
+  const [serviceId, setServiceId] = useState("");
+  const [date, setDate] = useState("");
+  const [slot, setSlot] = useState("");
+  const [notes, setNotes] = useState("");
+
+  // Combobox open states
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const [barberOpen, setBarberOpen] = useState(false);
+  const [serviceOpen, setServiceOpen] = useState(false);
+
+  // Search states
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [barberSearch, setBarberSearch] = useState("");
+  const [serviceSearch, setServiceSearch] = useState("");
+
+  const debouncedCustomerSearch = useDebounce(customerSearch);
+  const debouncedServiceSearch = useDebounce(serviceSearch);
+
+  const { data: customers } = useQuery(
+    trpc.admin.listCustomersBasic.queryOptions({ search: debouncedCustomerSearch || undefined }),
+  );
+  const { data: services } = useQuery(
+    trpc.admin.listServicesBasic.queryOptions({ search: debouncedServiceSearch || undefined }),
+  );
+  const { data: orgData } = useQuery({
+    queryKey: ["org-members-new-apt"],
+    queryFn: async () => {
+      const result = await authClient.organization.getFullOrganization();
+      return result.data;
+    },
+    enabled: isAdmin,
+  });
+
+  const allBarbers =
+    orgData?.members?.filter(
+      (m) => m.role === "barber" || m.role === "owner",
+    ) ?? [];
+
+  const filteredBarbers = barberSearch
+    ? allBarbers.filter((b) =>
+        b.user.name.toLowerCase().includes(barberSearch.toLowerCase()),
+      )
+    : allBarbers;
+
+  const effectiveBarberId = isAdmin ? barberId : currentUserId;
+
+  const { data: slots, isLoading: slotsLoading } = useQuery({
+    ...trpc.scheduling.getAvailableSlotsForOrg.queryOptions({
+      barberId: effectiveBarberId,
+      date,
+      serviceId,
+    }),
+    enabled: !!effectiveBarberId && !!date && !!serviceId,
+  });
+
+  const createMutation = useMutation(
+    trpc.scheduling.createAppointmentForCustomer.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: trpc.admin.listAppointments.queryKey(),
+        });
+        handleClose();
+      },
+    }),
+  );
+
+  function handleClose() {
+    setCustomerId("");
+    setBarberId("");
+    setServiceId("");
+    setDate("");
+    setSlot("");
+    setNotes("");
+    setCustomerSearch("");
+    setBarberSearch("");
+    setServiceSearch("");
+    onClose();
+  }
+
+  function handleSubmit() {
+    if (!customerId || !effectiveBarberId || !serviceId || !date || !slot)
+      return;
+    const startsAt = new Date(`${date}T${slot}:00`);
+    createMutation.mutate({
+      customerId,
+      barberId: effectiveBarberId,
+      serviceId,
+      startsAt,
+      notes: notes || undefined,
+    });
+  }
+
+  const activeCustomers = customers?.filter((c) => c.active) ?? [];
+  const activeServices = services?.filter((s) => s.active) ?? [];
+
+  const selectedCustomer = activeCustomers.find((c) => c.id === customerId);
+  const selectedService = activeServices.find((s) => s.id === serviceId);
+  const selectedBarber = allBarbers.find((b) => b.userId === barberId);
+
+  const canSubmit =
+    !!customerId &&
+    !!effectiveBarberId &&
+    !!serviceId &&
+    !!date &&
+    !!slot &&
+    !createMutation.isPending;
+
+  const slotsDisabledReason = !effectiveBarberId
+    ? "Selecione um profissional"
+    : !serviceId
+      ? "Selecione um serviço"
+      : !date
+        ? "Selecione uma data acima"
+        : null;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Novo Agendamento</DialogTitle>
+          <DialogDescription>
+            Crie um agendamento para um cliente
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Customer */}
+          <div className="space-y-2">
+            <Label>Cliente</Label>
+            <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  className="w-full justify-between font-normal"
+                >
+                  {selectedCustomer
+                    ? `${selectedCustomer.name} — ${selectedCustomer.phone}`
+                    : "Buscar cliente pelo nome..."}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="p-0" style={{ width: "var(--radix-popover-trigger-width)" }}>
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    placeholder="Buscar por nome..."
+                    value={customerSearch}
+                    onValueChange={setCustomerSearch}
+                  />
+                  <CommandList>
+                    <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                    <CommandGroup>
+                      {activeCustomers.map((c) => (
+                        <CommandItem
+                          key={c.id}
+                          value={c.id}
+                          onSelect={() => {
+                            setCustomerId(c.id);
+                            setCustomerOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              customerId === c.id ? "opacity-100" : "opacity-0",
+                            )}
+                          />
+                          <span className="font-medium">{c.name}</span>
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {c.phone}
+                          </span>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Barber (admin only) */}
+          {isAdmin && (
+            <div className="space-y-2">
+              <Label>Profissional</Label>
+              <Popover open={barberOpen} onOpenChange={setBarberOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between font-normal"
+                  >
+                    {selectedBarber
+                      ? selectedBarber.user.name
+                      : "Buscar profissional pelo nome..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="p-0" style={{ width: "var(--radix-popover-trigger-width)" }}>
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Buscar por nome..."
+                      value={barberSearch}
+                      onValueChange={setBarberSearch}
+                    />
+                    <CommandList>
+                      <CommandEmpty>Nenhum profissional encontrado.</CommandEmpty>
+                      <CommandGroup>
+                        {filteredBarbers.map((b) => (
+                          <CommandItem
+                            key={b.userId}
+                            value={b.userId}
+                            onSelect={() => {
+                              setBarberId(b.userId);
+                              setSlot("");
+                              setBarberOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                barberId === b.userId ? "opacity-100" : "opacity-0",
+                              )}
+                            />
+                            {b.user.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
+
+          {/* Service */}
+          <div className="space-y-2">
+            <Label>Serviço</Label>
+            <Popover open={serviceOpen} onOpenChange={setServiceOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  className="w-full justify-between font-normal"
+                >
+                  {selectedService
+                    ? selectedService.name
+                    : "Buscar serviço pelo nome..."}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="p-0" style={{ width: "var(--radix-popover-trigger-width)" }}>
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    placeholder="Buscar por nome..."
+                    value={serviceSearch}
+                    onValueChange={setServiceSearch}
+                  />
+                  <CommandList>
+                    <CommandEmpty>Nenhum serviço encontrado.</CommandEmpty>
+                    <CommandGroup>
+                      {activeServices.map((s) => (
+                        <CommandItem
+                          key={s.id}
+                          value={s.id}
+                          onSelect={() => {
+                            setServiceId(s.id);
+                            setSlot("");
+                            setServiceOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              serviceId === s.id ? "opacity-100" : "opacity-0",
+                            )}
+                          />
+                          {s.name}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Date & Time Slot */}
+          <div className="space-y-2">
+            <Label>Data e Hora</Label>
+            {currentRole !== "admin" ? (
+              <Input
+                type="datetime-local"
+                value={date && slot ? `${date}T${slot}` : ""}
+                onChange={(e) => {
+                  const [d, t] = e.target.value.split("T");
+                  setDate(d ?? "");
+                  setSlot(t ? t.slice(0, 5) : "");
+                }}
+                min={new Date().toISOString().slice(0, 16)}
+              />
+            ) : (
+              <>
+                <Input
+                  type="date"
+                  value={date}
+                  onChange={(e) => { setDate(e.target.value); setSlot(""); }}
+                  min={new Date().toISOString().split("T")[0]}
+                />
+                {slotsDisabledReason ? (
+                  <p className="text-sm text-muted-foreground">{slotsDisabledReason}</p>
+                ) : slotsLoading ? (
+                  <Skeleton className="h-10 w-full" />
+                ) : !slots?.length ? (
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum horário disponível nesta data
+                  </p>
+                ) : (
+                  <Select value={slot} onValueChange={(v) => setSlot(v ?? "")}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um horário">
+                        {slot
+                          ? new Intl.DateTimeFormat("pt-BR", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }).format(new Date(`${date}T${slot}:00`))
+                          : undefined}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {slots.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-2">
+            <Label>Observações (opcional)</Label>
+            <Input
+              placeholder="Ex: Cliente prefere corte curto"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {createMutation.error && (
+          <p className="text-sm text-destructive">
+            {createMutation.error.message}
+          </p>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            Cancelar
+          </Button>
+          <Button disabled={!canSubmit} onClick={handleSubmit}>
+            {createMutation.isPending ? "Salvando..." : "Criar Agendamento"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

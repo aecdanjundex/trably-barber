@@ -7,6 +7,7 @@ import {
   Scissors,
   Users,
   CalendarDays,
+  Timer,
   UserCircle,
   LogOut,
   Menu,
@@ -45,7 +46,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/utils";
 import { clientEnv } from "@/lib/env/client";
 import { useState, useMemo } from "react";
-import { BARBER_ALLOWED_ROUTES } from "@/lib/permissions";
+import { BARBER_FREE_ROUTES, BARBER_ALLOWED_ROUTES } from "@/lib/permissions";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Dono",
@@ -75,6 +76,7 @@ const allNavItems = [
   { title: "Relatórios", href: "/admin/relatorios", icon: BarChart3, premiumOnly: false },
   { title: "Itens Rápidos", href: "/admin/itens-rapidos", icon: Zap, premiumOnly: false },
   { title: "Equipe", href: "/admin/equipe", icon: Users, premiumOnly: false },
+  { title: "Fila de Espera", href: "/admin/fila-de-espera", icon: Timer, premiumOnly: false },
   { title: "Agenda", href: "/admin/agenda", icon: Clock, premiumOnly: false },
   { title: "Agendamentos", href: "/admin/agendamentos", icon: CalendarDays, premiumOnly: false },
   { title: "Clientes", href: "/admin/clientes", icon: UserCircle, premiumOnly: false },
@@ -108,8 +110,9 @@ export function AdminSidebar() {
       ? allNavItems
       : allNavItems.filter((item) => !item.premiumOnly);
     if (activeMember?.role === "barber") {
+      const allowed = isPremium ? BARBER_ALLOWED_ROUTES : BARBER_FREE_ROUTES;
       return items.filter((item) =>
-        (BARBER_ALLOWED_ROUTES as readonly string[]).includes(item.href),
+        (allowed as readonly string[]).includes(item.href),
       );
     }
     return items;
