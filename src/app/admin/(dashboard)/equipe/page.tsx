@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { authClient } from "@/lib/auth-client";
+import { useTRPC } from "@/trpc/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, UserPlus } from "lucide-react";
+import { UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,6 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -47,20 +49,16 @@ type InviteFormData = {
 };
 
 export default function EquipePage() {
+  const trpc = useTRPC();
   const queryClient = useQueryClient();
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [removeId, setRemoveId] = useState<string | null>(null);
   const form = useForm<InviteFormData>({
     defaultValues: { email: "", role: "barber" },
   });
 
-  const { data: membersData, isLoading } = useQuery({
-    queryKey: ["org-members"],
-    queryFn: async () => {
-      const result = await authClient.organization.getFullOrganization();
-      return result.data;
-    },
-  });
+  const { data: members = [], isLoading } = useQuery(
+    trpc.admin.listOrgMembers.queryOptions(),
+  );
 
   const inviteMutation = useMutation({
     mutationFn: async (data: InviteFormData) => {
@@ -73,27 +71,23 @@ export default function EquipePage() {
       return result.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["org-members"] });
+      queryClient.invalidateQueries({
+        queryKey: trpc.admin.listOrgMembers.queryKey(),
+      });
       setInviteOpen(false);
       form.reset();
     },
   });
 
-  const removeMutation = useMutation({
-    mutationFn: async (memberId: string) => {
-      const result = await authClient.organization.removeMember({
-        memberIdOrEmail: memberId,
-      });
-      if (result.error) throw new Error(result.error.message);
-      return result.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["org-members"] });
-      setRemoveId(null);
-    },
-  });
-
-  const members = membersData?.members ?? [];
+  const toggleBanMutation = useMutation(
+    trpc.admin.toggleUserBan.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({
+          queryKey: trpc.admin.listOrgMembers.queryKey(),
+        });
+      },
+    }),
+  );
 
   return (
     <div className="space-y-6">
@@ -128,7 +122,7 @@ export default function EquipePage() {
                 <TableHead>Membro</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Cargo</TableHead>
-                <TableHead className="w-24">Ações</TableHead>
+                <TableHead>Ativo</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -137,16 +131,16 @@ export default function EquipePage() {
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="h-8 w-8">
-                        <AvatarImage src={m.user.image ?? undefined} />
+                        <AvatarImage src={m.userImage ?? undefined} />
                         <AvatarFallback>
-                          {m.user.name?.[0]?.toUpperCase() ?? "?"}
+                          {m.userName?.[0]?.toUpperCase() ?? "?"}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="font-medium">{m.user.name}</span>
+                      <span className="font-medium">{m.userName}</span>
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {m.user.email}
+                    {m.userEmail}
                   </TableCell>
                   <TableCell>
                     <Badge
@@ -156,14 +150,24 @@ export default function EquipePage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {m.role !== "owner" && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setRemoveId(m.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                    {m.role !== "owner" ? (
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={!m.banned}
+                          onCheckedChange={(val) =>
+                            toggleBanMutation.mutate({
+                              userId: m.userId,
+                              banned: !val,
+                            })
+                          }
+                          disabled={toggleBanMutation.isPending}
+                        />
+                        <span className="text-sm text-muted-foreground">
+                          {m.banned ? "Inativo" : "Ativo"}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
                     )}
                   </TableCell>
                 </TableRow>
@@ -228,33 +232,6 @@ export default function EquipePage() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Remove Confirmation */}
-      <Dialog
-        open={!!removeId}
-        onOpenChange={(open) => !open && setRemoveId(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remover membro</DialogTitle>
-            <DialogDescription>
-              Tem certeza que deseja remover este membro da equipe?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRemoveId(null)}>
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={removeMutation.isPending}
-              onClick={() => removeId && removeMutation.mutate(removeId)}
-            >
-              {removeMutation.isPending ? "Removendo..." : "Remover"}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

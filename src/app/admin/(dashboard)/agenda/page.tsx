@@ -95,10 +95,11 @@ export default function AgendaPage() {
             value={selectedBarberId ?? ""}
             onValueChange={setSelectedBarberId}
           >
-            <SelectTrigger className="w-64">
+            <SelectTrigger>
               <SelectValue placeholder="Selecione um profissional">
                 {selectedBarberId
-                  ? (barbers.find((b) => b.userId === selectedBarberId)?.user.name ?? selectedBarberId)
+                  ? (barbers.find((b) => b.userId === selectedBarberId)?.user
+                      .name ?? selectedBarberId)
                   : undefined}
               </SelectValue>
             </SelectTrigger>
@@ -314,7 +315,7 @@ function DayConfigRow({
               value={String(interval)}
               onValueChange={(v) => setInterval(Number(v))}
             >
-              <SelectTrigger className="w-24">
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

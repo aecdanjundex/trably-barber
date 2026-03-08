@@ -1,14 +1,26 @@
 import "server-only";
 import { inject, injectable } from "inversify";
-import { eq, and, count, gte, lte, lt, desc } from "drizzle-orm";
+import { eq, and, count, gte, lte, lt, desc, sql } from "drizzle-orm";
 import type { Database } from "@/lib/db";
 import { TYPES } from "@/lib/di/types";
-import { service, customer, appointment, user } from "@/db/schema";
+import {
+  service,
+  customer,
+  appointment,
+  user,
+  member,
+  serviceOrder,
+  serviceOrderItem,
+} from "@/db/schema";
 import type { IAdminRepository } from "../interfaces/admin.repository.interface";
 import type {
   CreateServiceInput,
   UpdateServiceInput,
 } from "../schemas/service.schema";
+import type {
+  CreateCustomerInput,
+  UpdateCustomerInput,
+} from "../schemas/customer.schema";
 
 @injectable()
 class AdminRepository implements IAdminRepository {
@@ -78,9 +90,73 @@ class AdminRepository implements IAdminRepository {
       .orderBy(desc(customer.createdAt));
   }
 
+  async createCustomer(orgId: string, input: CreateCustomerInput) {
+    const now = new Date();
+    const rows = await this.db
+      .insert(customer)
+      .values({
+        id: crypto.randomUUID(),
+        organizationId: orgId,
+        name: input.name,
+        phone: input.phone,
+        email: input.email || null,
+        notes: input.notes || null,
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    return rows[0];
+  }
+
+  async updateCustomer(orgId: string, input: UpdateCustomerInput) {
+    const { id, ...data } = input;
+    const rows = await this.db
+      .update(customer)
+      .set({ ...data, email: data.email || null, updatedAt: new Date() })
+      .where(and(eq(customer.id, id), eq(customer.organizationId, orgId)))
+      .returning();
+    return rows[0] ?? null;
+  }
+
+  // ─── Users ───────────────────────────────────────────────────────────────────
+
+  async toggleUserBan(userId: string, banned: boolean) {
+    await this.db
+      .update(user)
+      .set({ banned, updatedAt: new Date() })
+      .where(eq(user.id, userId));
+  }
+
+  async listOrgMembers(orgId: string) {
+    const rows = await this.db
+      .select({
+        id: member.id,
+        role: member.role,
+        userId: user.id,
+        userName: user.name,
+        userEmail: user.email,
+        userImage: user.image,
+        banned: user.banned,
+      })
+      .from(member)
+      .innerJoin(user, eq(member.userId, user.id))
+      .where(eq(member.organizationId, orgId))
+      .orderBy(user.name);
+    return rows.map((r) => ({
+      ...r,
+      banned: r.banned ?? false,
+    }));
+  }
+
   // ─── Appointments ────────────────────────────────────────────────────────────
 
-  async listAppointments(orgId: string, barberId?: string, from?: Date, to?: Date) {
+  async listAppointments(
+    orgId: string,
+    barberId?: string,
+    from?: Date,
+    to?: Date,
+  ) {
     const conditions = [eq(appointment.organizationId, orgId)];
     if (barberId) conditions.push(eq(appointment.barberId, barberId));
     if (from) conditions.push(gte(appointment.startsAt, from));
@@ -149,11 +225,47 @@ class AdminRepository implements IAdminRepository {
       .from(service)
       .where(and(eq(service.organizationId, orgId), eq(service.active, true)));
 
+    const [invoicedResult] = await this.db
+      .select({
+        total: sql<number>`coalesce(sum(${serviceOrderItem.unitPriceInCents} * ${serviceOrderItem.quantity}), 0)`,
+      })
+      .from(serviceOrderItem)
+      .innerJoin(
+        serviceOrder,
+        eq(serviceOrderItem.serviceOrderId, serviceOrder.id),
+      )
+      .where(
+        and(
+          eq(serviceOrder.organizationId, orgId),
+          eq(serviceOrder.status, "completed"),
+          gte(serviceOrder.createdAt, today),
+          lt(serviceOrder.createdAt, tomorrow),
+        ),
+      );
+
+    const [completedOrdersResult] = await this.db
+      .select({ count: count() })
+      .from(serviceOrder)
+      .where(
+        and(
+          eq(serviceOrder.organizationId, orgId),
+          eq(serviceOrder.status, "completed"),
+          gte(serviceOrder.createdAt, today),
+          lt(serviceOrder.createdAt, tomorrow),
+        ),
+      );
+
+    const totalInvoiced = Number(invoicedResult?.total ?? 0);
+    const completedOrders = completedOrdersResult.count;
+    const averageTicketInCents =
+      completedOrders > 0 ? Math.round(totalInvoiced / completedOrders) : 0;
+
     return {
       totalCustomers: customersResult.count,
       totalAppointments: appointmentsResult.count,
       todayAppointments: todayResult.count,
       totalServices: servicesResult.count,
+      averageTicketInCents,
     };
   }
 }

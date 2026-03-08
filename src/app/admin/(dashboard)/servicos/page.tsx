@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTRPC } from "@/trpc/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,7 +54,6 @@ export default function ServicosPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const form = useForm<ServiceFormData>({
     defaultValues: {
@@ -92,15 +91,6 @@ export default function ServicosPage() {
   const toggleActiveMutation = useMutation(
     trpc.admin.updateService.mutationOptions({
       onSuccess: () => invalidate(),
-    }),
-  );
-
-  const deleteMutation = useMutation(
-    trpc.admin.deleteService.mutationOptions({
-      onSuccess: () => {
-        invalidate();
-        setDeleteId(null);
-      },
     }),
   );
 
@@ -223,13 +213,6 @@ export default function ServicosPage() {
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setDeleteId(svc.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -316,36 +299,6 @@ export default function ServicosPage() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={!!deleteId}
-        onOpenChange={(open) => !open && setDeleteId(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Excluir serviço</DialogTitle>
-            <DialogDescription>
-              Tem certeza que deseja excluir este serviço? Esta ação não pode
-              ser desfeita.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteId(null)}>
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={deleteMutation.isPending}
-              onClick={() =>
-                deleteId && deleteMutation.mutate({ id: deleteId })
-              }
-            >
-              {deleteMutation.isPending ? "Excluindo..." : "Excluir"}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

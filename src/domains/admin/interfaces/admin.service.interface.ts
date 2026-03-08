@@ -3,6 +3,10 @@ import type {
   CreateServiceInput,
   UpdateServiceInput,
 } from "../schemas/service.schema";
+import type {
+  CreateCustomerInput,
+  UpdateCustomerInput,
+} from "../schemas/customer.schema";
 
 interface IAdminService {
   // Services
@@ -16,6 +20,20 @@ interface IAdminService {
 
   // Customers
   listCustomers(orgId: string): Promise<Customer[]>;
+  createCustomer(orgId: string, input: CreateCustomerInput): Promise<Customer>;
+  updateCustomer(orgId: string, input: UpdateCustomerInput): Promise<Customer | null>;
+
+  // Users
+  toggleUserBan(userId: string, banned: boolean): Promise<void>;
+  listOrgMembers(orgId: string): Promise<{
+    id: string;
+    role: string;
+    userId: string;
+    userName: string;
+    userEmail: string;
+    userImage: string | null;
+    banned: boolean;
+  }[]>;
 
   // Appointments
   listAppointments(
@@ -38,6 +56,7 @@ interface IAdminService {
     totalAppointments: number;
     todayAppointments: number;
     totalServices: number;
+    averageTicketInCents: number;
   }>;
 }
 

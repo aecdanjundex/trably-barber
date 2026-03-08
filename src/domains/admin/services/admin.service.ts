@@ -7,6 +7,10 @@ import type {
   CreateServiceInput,
   UpdateServiceInput,
 } from "../schemas/service.schema";
+import type {
+  CreateCustomerInput,
+  UpdateCustomerInput,
+} from "../schemas/customer.schema";
 
 @injectable()
 class AdminService implements IAdminService {
@@ -33,6 +37,22 @@ class AdminService implements IAdminService {
 
   async listCustomers(orgId: string) {
     return this.repository.listCustomers(orgId);
+  }
+
+  async createCustomer(orgId: string, input: CreateCustomerInput) {
+    return this.repository.createCustomer(orgId, input);
+  }
+
+  async updateCustomer(orgId: string, input: UpdateCustomerInput) {
+    return this.repository.updateCustomer(orgId, input);
+  }
+
+  async toggleUserBan(userId: string, banned: boolean) {
+    return this.repository.toggleUserBan(userId, banned);
+  }
+
+  async listOrgMembers(orgId: string) {
+    return this.repository.listOrgMembers(orgId);
   }
 
   async listAppointments(orgId: string, barberId?: string, from?: Date, to?: Date) {

@@ -7,6 +7,8 @@ import type {
   serviceOrderItemProfessional,
   serviceOrderPayment,
   quickItem,
+  commissionPayment,
+  commissionPaymentItem,
   customer,
   user,
 } from "@/db/schema";
@@ -69,4 +71,53 @@ export type EnrichedQuickItem = QuickItem & {
 export type CommissionConfigWithNames = CommissionConfig & {
   professionalName: string;
   referenceName: string;
+};
+
+// ─── Commission Payment types ────────────────────────────────────────────────
+
+export type CommissionPayment = typeof commissionPayment.$inferSelect;
+export type CommissionPaymentInsert = typeof commissionPayment.$inferInsert;
+
+export type CommissionPaymentItem = typeof commissionPaymentItem.$inferSelect;
+export type CommissionPaymentItemInsert =
+  typeof commissionPaymentItem.$inferInsert;
+
+export type EnrichedCommissionPayment = CommissionPayment & {
+  professionalName: string;
+  items: CommissionPaymentItem[];
+};
+
+// ─── Report types ────────────────────────────────────────────────────────────
+
+export type ReportTotalInvoiced = {
+  totalInCents: number;
+};
+
+export type ReportByPaymentMethod = {
+  paymentMethodId: string;
+  paymentMethodName: string;
+  totalInCents: number;
+};
+
+export type ReportByProfessional = {
+  professionalId: string;
+  professionalName: string;
+  totalInCents: number;
+};
+
+export type ReportByProduct = {
+  referenceId: string | null;
+  name: string;
+  totalInCents: number;
+};
+
+export type ReportByService = {
+  referenceId: string | null;
+  name: string;
+  totalInCents: number;
+};
+
+export type ReportAverageTicket = {
+  averageTicketInCents: number;
+  completedOrders: number;
 };

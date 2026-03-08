@@ -1,6 +1,6 @@
 import "server-only";
 import { inject, injectable } from "inversify";
-import { eq, and, desc, gte, lte, inArray } from "drizzle-orm";
+import { eq, and, desc, gte, lte, inArray, sql } from "drizzle-orm";
 import type { Database } from "@/lib/db";
 import { TYPES } from "@/lib/di/types";
 import {
@@ -12,6 +12,8 @@ import {
   serviceOrderItemProfessional,
   serviceOrderPayment,
   quickItem,
+  commissionPayment,
+  commissionPaymentItem,
   customer,
   user,
   service,
@@ -30,7 +32,11 @@ import type {
   CreateQuickItemInput,
   UpdateQuickItemInput,
 } from "../schemas/service-order.schema";
-import type { EnrichedServiceOrder, EnrichedQuickItem } from "../types";
+import type {
+  EnrichedServiceOrder,
+  EnrichedQuickItem,
+  EnrichedCommissionPayment,
+} from "../types";
 
 @injectable()
 class ServiceOrderRepository implements IServiceOrderRepository {
@@ -279,7 +285,8 @@ class ServiceOrderRepository implements IServiceOrderRepository {
     filters?: { status?: string; customerId?: string; from?: Date; to?: Date },
   ): Promise<EnrichedServiceOrder[]> {
     const conditions = [eq(serviceOrder.organizationId, orgId)];
-    if (filters?.status) conditions.push(eq(serviceOrder.status, filters.status));
+    if (filters?.status)
+      conditions.push(eq(serviceOrder.status, filters.status));
     if (filters?.customerId)
       conditions.push(eq(serviceOrder.customerId, filters.customerId));
     if (filters?.from)
@@ -333,19 +340,17 @@ class ServiceOrderRepository implements IServiceOrderRepository {
     return this.enrichOrder(rows[0]);
   }
 
-  private async enrichOrder(
-    order: {
-      id: string;
-      organizationId: string;
-      customerId: string | null;
-      status: string;
-      notes: string | null;
-      createdAt: Date;
-      updatedAt: Date;
-      customerName: string | null;
-      customerPhone: string | null;
-    },
-  ): Promise<EnrichedServiceOrder> {
+  private async enrichOrder(order: {
+    id: string;
+    organizationId: string;
+    customerId: string | null;
+    status: string;
+    notes: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    customerName: string | null;
+    customerPhone: string | null;
+  }): Promise<EnrichedServiceOrder> {
     // Fetch items
     const items = await this.db
       .select()
@@ -362,8 +367,7 @@ class ServiceOrderRepository implements IServiceOrderRepository {
             serviceOrderItemId: serviceOrderItemProfessional.serviceOrderItemId,
             professionalId: serviceOrderItemProfessional.professionalId,
             commissionType: serviceOrderItemProfessional.commissionType,
-            fixedValueInCents:
-              serviceOrderItemProfessional.fixedValueInCents,
+            fixedValueInCents: serviceOrderItemProfessional.fixedValueInCents,
             percentageValue: serviceOrderItemProfessional.percentageValue,
             createdAt: serviceOrderItemProfessional.createdAt,
             professionalName: user.name,
@@ -373,9 +377,7 @@ class ServiceOrderRepository implements IServiceOrderRepository {
             user,
             eq(serviceOrderItemProfessional.professionalId, user.id),
           )
-          .where(
-            eq(serviceOrderItemProfessional.serviceOrderItemId, item.id),
-          );
+          .where(eq(serviceOrderItemProfessional.serviceOrderItemId, item.id));
 
         return { ...item, professionals };
       }),
@@ -538,9 +540,7 @@ class ServiceOrderRepository implements IServiceOrderRepository {
   }
 
   async removeServiceOrderItem(id: string) {
-    await this.db
-      .delete(serviceOrderItem)
-      .where(eq(serviceOrderItem.id, id));
+    await this.db.delete(serviceOrderItem).where(eq(serviceOrderItem.id, id));
   }
 
   // ─── Payments ──────────────────────────────────────────────────────────────
@@ -669,6 +669,402 @@ class ServiceOrderRepository implements IServiceOrderRepository {
     await this.db
       .delete(quickItem)
       .where(and(eq(quickItem.id, id), eq(quickItem.organizationId, orgId)));
+  }
+
+  // ─── Reports ─────────────────────────────────────────────────────────────
+
+  async getReportTotalInvoiced(orgId: string, from: Date, to: Date) {
+    const rows = await this.db
+      .select({
+        total: sql<number>`coalesce(sum(${serviceOrderItem.unitPriceInCents} * ${serviceOrderItem.quantity}), 0)`,
+      })
+      .from(serviceOrderItem)
+      .innerJoin(
+        serviceOrder,
+        eq(serviceOrderItem.serviceOrderId, serviceOrder.id),
+      )
+      .where(
+        and(
+          eq(serviceOrder.organizationId, orgId),
+          eq(serviceOrder.status, "completed"),
+          gte(serviceOrder.createdAt, from),
+          lte(serviceOrder.createdAt, to),
+        ),
+      );
+    return { totalInCents: Number(rows[0]?.total ?? 0) };
+  }
+
+  async getReportAverageTicket(orgId: string, from: Date, to: Date) {
+    const [invoicedResult] = await this.db
+      .select({
+        total: sql<number>`coalesce(sum(${serviceOrderItem.unitPriceInCents} * ${serviceOrderItem.quantity}), 0)`,
+      })
+      .from(serviceOrderItem)
+      .innerJoin(
+        serviceOrder,
+        eq(serviceOrderItem.serviceOrderId, serviceOrder.id),
+      )
+      .where(
+        and(
+          eq(serviceOrder.organizationId, orgId),
+          eq(serviceOrder.status, "completed"),
+          gte(serviceOrder.createdAt, from),
+          lte(serviceOrder.createdAt, to),
+        ),
+      );
+
+    const [completedOrdersResult] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(serviceOrder)
+      .where(
+        and(
+          eq(serviceOrder.organizationId, orgId),
+          eq(serviceOrder.status, "completed"),
+          gte(serviceOrder.createdAt, from),
+          lte(serviceOrder.createdAt, to),
+        ),
+      );
+
+    const totalInvoiced = Number(invoicedResult?.total ?? 0);
+    const completedOrders = Number(completedOrdersResult?.count ?? 0);
+    const averageTicketInCents =
+      completedOrders > 0 ? Math.round(totalInvoiced / completedOrders) : 0;
+
+    return { averageTicketInCents, completedOrders };
+  }
+
+  async getReportByPaymentMethod(orgId: string, from: Date, to: Date) {
+    return this.db
+      .select({
+        paymentMethodId: serviceOrderPayment.paymentMethodId,
+        paymentMethodName: paymentMethod.name,
+        totalInCents:
+          sql<number>`coalesce(sum(${serviceOrderPayment.amountInCents}), 0)`,
+      })
+      .from(serviceOrderPayment)
+      .innerJoin(
+        paymentMethod,
+        eq(serviceOrderPayment.paymentMethodId, paymentMethod.id),
+      )
+      .innerJoin(
+        serviceOrder,
+        eq(serviceOrderPayment.serviceOrderId, serviceOrder.id),
+      )
+      .where(
+        and(
+          eq(serviceOrder.organizationId, orgId),
+          gte(serviceOrderPayment.paidAt, from),
+          lte(serviceOrderPayment.paidAt, to),
+        ),
+      )
+      .groupBy(serviceOrderPayment.paymentMethodId, paymentMethod.name)
+      .then((rows) =>
+        rows.map((r) => ({ ...r, totalInCents: Number(r.totalInCents) })),
+      );
+  }
+
+  async getReportByProfessional(orgId: string, from: Date, to: Date) {
+    return this.db
+      .select({
+        professionalId: serviceOrderItemProfessional.professionalId,
+        professionalName: user.name,
+        totalInCents:
+          sql<number>`coalesce(sum(${serviceOrderItem.unitPriceInCents} * ${serviceOrderItem.quantity}), 0)`,
+      })
+      .from(serviceOrderItemProfessional)
+      .innerJoin(
+        serviceOrderItem,
+        eq(
+          serviceOrderItemProfessional.serviceOrderItemId,
+          serviceOrderItem.id,
+        ),
+      )
+      .innerJoin(
+        serviceOrder,
+        eq(serviceOrderItem.serviceOrderId, serviceOrder.id),
+      )
+      .innerJoin(
+        user,
+        eq(serviceOrderItemProfessional.professionalId, user.id),
+      )
+      .where(
+        and(
+          eq(serviceOrder.organizationId, orgId),
+          eq(serviceOrder.status, "completed"),
+          gte(serviceOrder.createdAt, from),
+          lte(serviceOrder.createdAt, to),
+        ),
+      )
+      .groupBy(serviceOrderItemProfessional.professionalId, user.name)
+      .then((rows) =>
+        rows.map((r) => ({ ...r, totalInCents: Number(r.totalInCents) })),
+      );
+  }
+
+  async getReportByProduct(orgId: string, from: Date, to: Date) {
+    return this.db
+      .select({
+        referenceId: serviceOrderItem.referenceId,
+        name: serviceOrderItem.name,
+        totalInCents:
+          sql<number>`coalesce(sum(${serviceOrderItem.unitPriceInCents} * ${serviceOrderItem.quantity}), 0)`,
+      })
+      .from(serviceOrderItem)
+      .innerJoin(
+        serviceOrder,
+        eq(serviceOrderItem.serviceOrderId, serviceOrder.id),
+      )
+      .where(
+        and(
+          eq(serviceOrder.organizationId, orgId),
+          eq(serviceOrder.status, "completed"),
+          eq(serviceOrderItem.itemType, "product"),
+          gte(serviceOrder.createdAt, from),
+          lte(serviceOrder.createdAt, to),
+        ),
+      )
+      .groupBy(serviceOrderItem.referenceId, serviceOrderItem.name)
+      .then((rows) =>
+        rows.map((r) => ({ ...r, totalInCents: Number(r.totalInCents) })),
+      );
+  }
+
+  async getReportByService(orgId: string, from: Date, to: Date) {
+    return this.db
+      .select({
+        referenceId: serviceOrderItem.referenceId,
+        name: serviceOrderItem.name,
+        totalInCents:
+          sql<number>`coalesce(sum(${serviceOrderItem.unitPriceInCents} * ${serviceOrderItem.quantity}), 0)`,
+      })
+      .from(serviceOrderItem)
+      .innerJoin(
+        serviceOrder,
+        eq(serviceOrderItem.serviceOrderId, serviceOrder.id),
+      )
+      .where(
+        and(
+          eq(serviceOrder.organizationId, orgId),
+          eq(serviceOrder.status, "completed"),
+          eq(serviceOrderItem.itemType, "service"),
+          gte(serviceOrder.createdAt, from),
+          lte(serviceOrder.createdAt, to),
+        ),
+      )
+      .groupBy(serviceOrderItem.referenceId, serviceOrderItem.name)
+      .then((rows) =>
+        rows.map((r) => ({ ...r, totalInCents: Number(r.totalInCents) })),
+      );
+  }
+
+  // ─── Commission Payments ─────────────────────────────────────────────────
+
+  async listCommissionPayments(
+    orgId: string,
+    filters?: { professionalId?: string; status?: string },
+  ): Promise<EnrichedCommissionPayment[]> {
+    const conditions = [eq(commissionPayment.organizationId, orgId)];
+    if (filters?.professionalId)
+      conditions.push(
+        eq(commissionPayment.professionalId, filters.professionalId),
+      );
+    if (filters?.status)
+      conditions.push(eq(commissionPayment.status, filters.status));
+
+    const rows = await this.db
+      .select({
+        id: commissionPayment.id,
+        organizationId: commissionPayment.organizationId,
+        professionalId: commissionPayment.professionalId,
+        periodFrom: commissionPayment.periodFrom,
+        periodTo: commissionPayment.periodTo,
+        totalCommissionInCents: commissionPayment.totalCommissionInCents,
+        status: commissionPayment.status,
+        paidAt: commissionPayment.paidAt,
+        notes: commissionPayment.notes,
+        createdAt: commissionPayment.createdAt,
+        updatedAt: commissionPayment.updatedAt,
+        professionalName: user.name,
+      })
+      .from(commissionPayment)
+      .innerJoin(user, eq(commissionPayment.professionalId, user.id))
+      .where(and(...conditions))
+      .orderBy(desc(commissionPayment.createdAt));
+
+    return Promise.all(
+      rows.map(async (row) => {
+        const items = await this.db
+          .select()
+          .from(commissionPaymentItem)
+          .where(eq(commissionPaymentItem.commissionPaymentId, row.id))
+          .orderBy(commissionPaymentItem.createdAt);
+        return { ...row, items };
+      }),
+    );
+  }
+
+  async getCommissionPayment(
+    orgId: string,
+    id: string,
+  ): Promise<EnrichedCommissionPayment | null> {
+    const rows = await this.db
+      .select({
+        id: commissionPayment.id,
+        organizationId: commissionPayment.organizationId,
+        professionalId: commissionPayment.professionalId,
+        periodFrom: commissionPayment.periodFrom,
+        periodTo: commissionPayment.periodTo,
+        totalCommissionInCents: commissionPayment.totalCommissionInCents,
+        status: commissionPayment.status,
+        paidAt: commissionPayment.paidAt,
+        notes: commissionPayment.notes,
+        createdAt: commissionPayment.createdAt,
+        updatedAt: commissionPayment.updatedAt,
+        professionalName: user.name,
+      })
+      .from(commissionPayment)
+      .innerJoin(user, eq(commissionPayment.professionalId, user.id))
+      .where(
+        and(
+          eq(commissionPayment.id, id),
+          eq(commissionPayment.organizationId, orgId),
+        ),
+      )
+      .limit(1);
+
+    if (!rows[0]) return null;
+
+    const items = await this.db
+      .select()
+      .from(commissionPaymentItem)
+      .where(eq(commissionPaymentItem.commissionPaymentId, rows[0].id))
+      .orderBy(commissionPaymentItem.createdAt);
+
+    return { ...rows[0], items };
+  }
+
+  async createCommissionPayment(input: {
+    organizationId: string;
+    professionalId: string;
+    periodFrom: Date;
+    periodTo: Date;
+    totalCommissionInCents: number;
+    items: {
+      serviceOrderItemId: string | null;
+      referenceType: string;
+      referenceId: string | null;
+      name: string;
+      quantity: number;
+      unitPriceInCents: number;
+      commissionType: string;
+      fixedValueInCents: number | null;
+      percentageValue: number | null;
+      commissionAmountInCents: number;
+    }[];
+  }) {
+    const now = new Date();
+    const paymentId = crypto.randomUUID();
+
+    const rows = await this.db
+      .insert(commissionPayment)
+      .values({
+        id: paymentId,
+        organizationId: input.organizationId,
+        professionalId: input.professionalId,
+        periodFrom: input.periodFrom,
+        periodTo: input.periodTo,
+        totalCommissionInCents: input.totalCommissionInCents,
+        status: "pending",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    if (input.items.length) {
+      await this.db.insert(commissionPaymentItem).values(
+        input.items.map((item) => ({
+          id: crypto.randomUUID(),
+          commissionPaymentId: paymentId,
+          serviceOrderItemId: item.serviceOrderItemId,
+          referenceType: item.referenceType,
+          referenceId: item.referenceId,
+          name: item.name,
+          quantity: item.quantity,
+          unitPriceInCents: item.unitPriceInCents,
+          commissionType: item.commissionType,
+          fixedValueInCents: item.fixedValueInCents,
+          percentageValue: item.percentageValue,
+          commissionAmountInCents: item.commissionAmountInCents,
+          createdAt: now,
+        })),
+      );
+    }
+
+    return rows[0];
+  }
+
+  async updateCommissionPaymentStatus(
+    orgId: string,
+    id: string,
+    status: string,
+  ) {
+    const rows = await this.db
+      .update(commissionPayment)
+      .set({
+        status,
+        paidAt: status === "paid" ? new Date() : null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(commissionPayment.id, id),
+          eq(commissionPayment.organizationId, orgId),
+        ),
+      )
+      .returning();
+    return rows[0] ?? null;
+  }
+
+  async getItemsByProfessionalAndPeriod(
+    orgId: string,
+    professionalId: string,
+    from: Date,
+    to: Date,
+  ) {
+    return this.db
+      .select({
+        serviceOrderItemId: serviceOrderItem.id,
+        itemType: serviceOrderItem.itemType,
+        referenceId: serviceOrderItem.referenceId,
+        name: serviceOrderItem.name,
+        quantity: serviceOrderItem.quantity,
+        unitPriceInCents: serviceOrderItem.unitPriceInCents,
+        commissionType: serviceOrderItemProfessional.commissionType,
+        fixedValueInCents: serviceOrderItemProfessional.fixedValueInCents,
+        percentageValue: serviceOrderItemProfessional.percentageValue,
+      })
+      .from(serviceOrderItemProfessional)
+      .innerJoin(
+        serviceOrderItem,
+        eq(
+          serviceOrderItemProfessional.serviceOrderItemId,
+          serviceOrderItem.id,
+        ),
+      )
+      .innerJoin(
+        serviceOrder,
+        eq(serviceOrderItem.serviceOrderId, serviceOrder.id),
+      )
+      .where(
+        and(
+          eq(serviceOrder.organizationId, orgId),
+          eq(serviceOrder.status, "completed"),
+          eq(serviceOrderItemProfessional.professionalId, professionalId),
+          gte(serviceOrder.createdAt, from),
+          lte(serviceOrder.createdAt, to),
+        ),
+      )
+      .orderBy(serviceOrderItem.createdAt);
   }
 }
 

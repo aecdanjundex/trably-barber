@@ -3,13 +3,7 @@
 import { useState } from "react";
 import { useTRPC } from "@/trpc/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Plus,
-  Eye,
-  RotateCcw,
-  CheckCircle2,
-  XCircle,
-} from "lucide-react";
+import { Plus, Eye, RotateCcw, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -106,8 +100,12 @@ export default function OrdensServicoPage() {
 
       <div className="flex gap-2">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Filtrar por status" />
+          <SelectTrigger>
+            <SelectValue placeholder="Filtrar por status">
+              {statusFilter === "all"
+                ? "Todos"
+                : (STATUS_LABELS[statusFilter] ?? statusFilter)}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
@@ -156,9 +154,7 @@ export default function OrdensServicoPage() {
                   </TableCell>
                   <TableCell>
                     {o.customerName ?? (
-                      <span className="text-muted-foreground">
-                        Sem cliente
-                      </span>
+                      <span className="text-muted-foreground">Sem cliente</span>
                     )}
                   </TableCell>
                   <TableCell>{o.items.length}</TableCell>

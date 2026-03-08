@@ -118,6 +118,7 @@ export const customer = pgTable(
     phone: text("phone").notNull(),
     email: text("email"),
     notes: text("notes"),
+    active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
   },
@@ -492,4 +493,82 @@ export const quickItem = pgTable(
     updatedAt: timestamp("updated_at").notNull(),
   },
   (t) => [index("quick_item_org_idx").on(t.organizationId)],
+);
+
+// ─── Commission Payments ─────────────────────────────────────────────────────
+
+/**
+ * Commission payment record for a professional in a given service period.
+ * Generated from completed service orders within a date range.
+ * Tracks all items the professional worked on and calculates total commission.
+ */
+export const commissionPayment = pgTable(
+  "commission_payment",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    /** The professional receiving the commission */
+    professionalId: text("professional_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** Start of the service period */
+    periodFrom: timestamp("period_from").notNull(),
+    /** End of the service period */
+    periodTo: timestamp("period_to").notNull(),
+    /** Total commission amount in cents */
+    totalCommissionInCents: integer("total_commission_in_cents").notNull(),
+    /** "pending" | "paid" | "cancelled" */
+    status: text("status").notNull().default("pending"),
+    paidAt: timestamp("paid_at"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (t) => [
+    index("commission_payment_org_idx").on(t.organizationId),
+    index("commission_payment_professional_idx").on(t.professionalId),
+  ],
+);
+
+/**
+ * Line items within a commission payment.
+ * Each item represents a service/product the professional worked on,
+ * with the unit price, commission config snapshot, and calculated commission.
+ */
+export const commissionPaymentItem = pgTable(
+  "commission_payment_item",
+  {
+    id: text("id").primaryKey(),
+    commissionPaymentId: text("commission_payment_id")
+      .notNull()
+      .references(() => commissionPayment.id, { onDelete: "cascade" }),
+    /** Reference to the original service order item */
+    serviceOrderItemId: text("service_order_item_id").references(
+      () => serviceOrderItem.id,
+      { onDelete: "set null" },
+    ),
+    /** "service" | "product" */
+    referenceType: text("reference_type").notNull(),
+    /** Original service or product ID */
+    referenceId: text("reference_id"),
+    /** Snapshot of name */
+    name: text("name").notNull(),
+    quantity: integer("quantity").notNull(),
+    /** Snapshot of unit price in cents */
+    unitPriceInCents: integer("unit_price_in_cents").notNull(),
+    /** "fixed" | "percentage" */
+    commissionType: text("commission_type").notNull(),
+    /** Fixed value in cents (when type = "fixed") */
+    fixedValueInCents: integer("fixed_value_in_cents"),
+    /** Percentage in basis points (1000 = 10.00%) */
+    percentageValue: integer("percentage_value"),
+    /** Calculated commission in cents for this line */
+    commissionAmountInCents: integer("commission_amount_in_cents").notNull(),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (t) => [
+    index("commission_payment_item_payment_idx").on(t.commissionPaymentId),
+  ],
 );

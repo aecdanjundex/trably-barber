@@ -97,9 +97,7 @@ export default function OrdemDetalhe({
   const { data: quickItems } = useQuery(
     trpc.serviceOrder.listQuickItems.queryOptions(),
   );
-  const { data: customers } = useQuery(
-    trpc.admin.listCustomers.queryOptions(),
-  );
+  const { data: customers } = useQuery(trpc.admin.listCustomers.queryOptions());
   const { data: org } = useQuery({
     queryKey: ["active-organization"],
     queryFn: async () => {
@@ -232,9 +230,7 @@ export default function OrdemDetalhe({
     }[]
   >([]);
 
-  function openEditItem(
-    item: NonNullable<typeof order>["items"][number],
-  ) {
+  function openEditItem(item: NonNullable<typeof order>["items"][number]) {
     setEditingItemId(item.id);
     setEditItemQuantity(String(item.quantity));
     setEditItemPrice((item.unitPriceInCents / 100).toFixed(2));
@@ -452,8 +448,13 @@ export default function OrdemDetalhe({
               })
             }
           >
-            <SelectTrigger className="w-[300px]">
-              <SelectValue placeholder="Selecione um cliente..." />
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione um cliente...">
+                {order.customerId
+                  ? ((customers ?? []).find((c) => c.id === order.customerId)
+                      ?.name ?? order.customerId)
+                  : "Sem cliente"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">Sem cliente</SelectItem>
@@ -619,7 +620,11 @@ export default function OrdemDetalhe({
               <span
                 className={`font-bold ${balance > 0 ? "text-yellow-600" : balance === 0 ? "text-green-600" : "text-red-600"}`}
               >
-                {balance > 0 ? `Falta ${formatPrice(balance)}` : balance === 0 ? "Pago" : `Troco ${formatPrice(Math.abs(balance))}`}
+                {balance > 0
+                  ? `Falta ${formatPrice(balance)}`
+                  : balance === 0
+                    ? "Pago"
+                    : `Troco ${formatPrice(Math.abs(balance))}`}
               </span>
             </div>
           </CardContent>
@@ -632,10 +637,7 @@ export default function OrdemDetalhe({
               Pagamentos
             </CardTitle>
             {order.status === "open" && (
-              <Button
-                size="sm"
-                onClick={() => setPaymentDialogOpen(true)}
-              >
+              <Button size="sm" onClick={() => setPaymentDialogOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
                 Registrar Pagamento
               </Button>
@@ -751,12 +753,18 @@ export default function OrdemDetalhe({
                   onValueChange={(v) => setItemReferenceId(v ?? "")}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Selecione..." />
+                    <SelectValue placeholder="Selecione...">
+                      {itemReferenceId
+                        ? ((itemType === "service" ? services : products)?.find(
+                            (r) => r.id === itemReferenceId,
+                          )?.name ?? itemReferenceId)
+                        : undefined}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {(itemType === "service"
-                      ? services ?? []
-                      : products ?? []
+                      ? (services ?? [])
+                      : (products ?? [])
                     ).map((r) => (
                       <SelectItem key={r.id} value={r.id}>
                         {r.name}
@@ -780,12 +788,16 @@ export default function OrdemDetalhe({
                 <Label>Profissional</Label>
                 <Select
                   value={itemProfessionalIds[0] ?? ""}
-                  onValueChange={(v) =>
-                    setItemProfessionalIds(v ? [v] : [])
-                  }
+                  onValueChange={(v) => setItemProfessionalIds(v ? [v] : [])}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Selecione..." />
+                    <SelectValue placeholder="Selecione...">
+                      {itemProfessionalIds[0]
+                        ? (members.find(
+                            (m) => m.userId === itemProfessionalIds[0],
+                          )?.user.name ?? itemProfessionalIds[0])
+                        : undefined}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {members.map((m) => (
@@ -952,7 +964,13 @@ export default function OrdemDetalhe({
                 onValueChange={setPaymentMethodId}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione..." />
+                  <SelectValue placeholder="Selecione...">
+                    {paymentMethodId
+                      ? ((paymentMethods ?? []).find(
+                          (m) => m.id === paymentMethodId,
+                        )?.name ?? paymentMethodId)
+                      : undefined}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {(paymentMethods ?? [])
@@ -998,9 +1016,7 @@ export default function OrdemDetalhe({
                 type="submit"
                 disabled={addPaymentMutation.isPending || !paymentMethodId}
               >
-                {addPaymentMutation.isPending
-                  ? "Registrando..."
-                  : "Registrar"}
+                {addPaymentMutation.isPending ? "Registrando..." : "Registrar"}
               </Button>
             </DialogFooter>
           </form>
@@ -1037,7 +1053,12 @@ function ProfessionalRow({
           onValueChange={(v) => onUpdate("professionalId", v)}
         >
           <SelectTrigger className="h-8 w-full text-sm">
-            <SelectValue placeholder="Selecione..." />
+            <SelectValue placeholder="Selecione...">
+              {professional.professionalId
+                ? (members.find((m) => m.userId === professional.professionalId)
+                    ?.user.name ?? professional.professionalId)
+                : undefined}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {members.map((m) => (

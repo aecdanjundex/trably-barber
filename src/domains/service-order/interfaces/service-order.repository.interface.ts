@@ -9,6 +9,14 @@ import type {
   EnrichedServiceOrder,
   EnrichedQuickItem,
   CommissionConfigWithNames,
+  CommissionPayment,
+  EnrichedCommissionPayment,
+  ReportTotalInvoiced,
+  ReportAverageTicket,
+  ReportByPaymentMethod,
+  ReportByProfessional,
+  ReportByProduct,
+  ReportByService,
 } from "../types";
 import type {
   CreateProductInput,
@@ -55,14 +63,14 @@ interface IServiceOrderRepository {
   deletePaymentMethod(orgId: string, id: string): Promise<void>;
 
   // ─── Commission Config ─────────────────────────────────────────────────────
-  listCommissionConfigs(
-    orgId: string,
-  ): Promise<CommissionConfigWithNames[]>;  getCommissionConfigsForReference(
+  listCommissionConfigs(orgId: string): Promise<CommissionConfigWithNames[]>;
+  getCommissionConfigsForReference(
     orgId: string,
     referenceType: string,
     referenceId: string,
     professionalIds: string[],
-  ): Promise<CommissionConfig[]>;  upsertCommissionConfig(
+  ): Promise<CommissionConfig[]>;
+  upsertCommissionConfig(
     orgId: string,
     input: UpsertCommissionConfigInput,
   ): Promise<CommissionConfig>;
@@ -132,6 +140,90 @@ interface IServiceOrderRepository {
     input: UpdateQuickItemInput,
   ): Promise<QuickItem | null>;
   deleteQuickItem(orgId: string, id: string): Promise<void>;
+
+  // ─── Reports ───────────────────────────────────────────────────────────────
+  getReportTotalInvoiced(
+    orgId: string,
+    from: Date,
+    to: Date,
+  ): Promise<ReportTotalInvoiced>;
+  getReportAverageTicket(
+    orgId: string,
+    from: Date,
+    to: Date,
+  ): Promise<ReportAverageTicket>;
+  getReportByPaymentMethod(
+    orgId: string,
+    from: Date,
+    to: Date,
+  ): Promise<ReportByPaymentMethod[]>;
+  getReportByProfessional(
+    orgId: string,
+    from: Date,
+    to: Date,
+  ): Promise<ReportByProfessional[]>;
+  getReportByProduct(
+    orgId: string,
+    from: Date,
+    to: Date,
+  ): Promise<ReportByProduct[]>;
+  getReportByService(
+    orgId: string,
+    from: Date,
+    to: Date,
+  ): Promise<ReportByService[]>;
+
+  // ─── Commission Payments ───────────────────────────────────────────────────
+  listCommissionPayments(
+    orgId: string,
+    filters?: { professionalId?: string; status?: string },
+  ): Promise<EnrichedCommissionPayment[]>;
+  getCommissionPayment(
+    orgId: string,
+    id: string,
+  ): Promise<EnrichedCommissionPayment | null>;
+  createCommissionPayment(input: {
+    organizationId: string;
+    professionalId: string;
+    periodFrom: Date;
+    periodTo: Date;
+    totalCommissionInCents: number;
+    items: {
+      serviceOrderItemId: string | null;
+      referenceType: string;
+      referenceId: string | null;
+      name: string;
+      quantity: number;
+      unitPriceInCents: number;
+      commissionType: string;
+      fixedValueInCents: number | null;
+      percentageValue: number | null;
+      commissionAmountInCents: number;
+    }[];
+  }): Promise<CommissionPayment>;
+  updateCommissionPaymentStatus(
+    orgId: string,
+    id: string,
+    status: string,
+  ): Promise<CommissionPayment | null>;
+  getItemsByProfessionalAndPeriod(
+    orgId: string,
+    professionalId: string,
+    from: Date,
+    to: Date,
+  ): Promise<
+    {
+      serviceOrderItemId: string;
+      itemType: string;
+      referenceId: string | null;
+      name: string;
+      quantity: number;
+      unitPriceInCents: number;
+      commissionType: string;
+      fixedValueInCents: number | null;
+      percentageValue: number | null;
+    }[]
+  >;
 }
 
 export type { IServiceOrderRepository };

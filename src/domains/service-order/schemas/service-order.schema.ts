@@ -150,3 +150,32 @@ export const updateQuickItemSchema = z.object({
 
 export type CreateQuickItemInput = z.infer<typeof createQuickItemSchema>;
 export type UpdateQuickItemInput = z.infer<typeof updateQuickItemSchema>;
+
+// ─── Reports ─────────────────────────────────────────────────────────────────
+
+export const reportDateRangeSchema = z.object({
+  from: z.date(),
+  to: z.date(),
+});
+
+export type ReportDateRangeInput = z.infer<typeof reportDateRangeSchema>;
+
+// ─── Commission Payments ─────────────────────────────────────────────────────
+
+export const generateCommissionPaymentSchema = z.object({
+  professionalId: z.string().min(1, "Profissional é obrigatório"),
+  periodFrom: z.date(),
+  periodTo: z.date(),
+});
+
+export const updateCommissionPaymentStatusSchema = z.object({
+  id: z.string(),
+  status: z.enum(["paid", "cancelled"]),
+});
+
+export type GenerateCommissionPaymentInput = z.infer<
+  typeof generateCommissionPaymentSchema
+>;
+export type UpdateCommissionPaymentStatusInput = z.infer<
+  typeof updateCommissionPaymentStatusSchema
+>;

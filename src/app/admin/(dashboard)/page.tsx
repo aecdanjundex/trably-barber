@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Scissors, Users, Clock } from "lucide-react";
+import { CalendarDays, Scissors, Users, Clock, DollarSign } from "lucide-react";
 import { useTRPC } from "@/trpc/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +24,10 @@ const ORG_ADMIN_ROLES = ["owner", "admin"];
 
 const STATUS_MAP: Record<
   string,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
+  {
+    label: string;
+    variant: "default" | "secondary" | "destructive" | "outline";
+  }
 > = {
   scheduled: { label: "Agendado", variant: "default" },
   pending_confirmation: { label: "Aguardando confirmação", variant: "outline" },
@@ -63,12 +66,22 @@ function StatCard({
   value,
   icon: Icon,
   loading,
+  format,
 }: {
   title: string;
   value: number;
   icon: React.ElementType;
   loading: boolean;
+  format?: "currency";
 }) {
+  const display =
+    format === "currency"
+      ? (value / 100).toLocaleString("pt-BR", {
+          style: "currency",
+          currency: "BRL",
+        })
+      : value;
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -79,7 +92,7 @@ function StatCard({
         {loading ? (
           <Skeleton className="h-8 w-16" />
         ) : (
-          <div className="text-2xl font-bold">{value}</div>
+          <div className="text-2xl font-bold">{display}</div>
         )}
       </CardContent>
     </Card>
@@ -156,7 +169,10 @@ export default function AdminDashboardPage() {
 
   for (const apt of appointments ?? []) {
     if (!grouped.has(apt.barberId)) {
-      grouped.set(apt.barberId, { barberName: apt.barberName, appointments: [] });
+      grouped.set(apt.barberId, {
+        barberName: apt.barberName,
+        appointments: [],
+      });
     }
     grouped.get(apt.barberId)!.appointments.push(apt);
   }
@@ -172,7 +188,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <StatCard
           title="Agendamentos Hoje"
           value={stats?.todayAppointments ?? 0}
@@ -197,13 +213,22 @@ export default function AdminDashboardPage() {
           icon={Scissors}
           loading={statsLoading}
         />
+        <StatCard
+          title="Ticket Médio"
+          value={stats?.averageTicketInCents ?? 0}
+          icon={DollarSign}
+          loading={statsLoading}
+          format="currency"
+        />
       </div>
 
       {/* Appointments section */}
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Agendamentos a partir de hoje</h2>
+            <h2 className="text-lg font-semibold">
+              Agendamentos a partir de hoje
+            </h2>
             <p className="text-sm text-muted-foreground">
               {aptsLoading
                 ? "…"
@@ -212,12 +237,16 @@ export default function AdminDashboardPage() {
           </div>
 
           {isAdmin && barbers.length > 1 && (
-            <Select value={selectedBarberId} onValueChange={setSelectedBarberId}>
-              <SelectTrigger className="w-52">
+            <Select
+              value={selectedBarberId}
+              onValueChange={setSelectedBarberId}
+            >
+              <SelectTrigger>
                 <SelectValue placeholder="Filtrar profissional">
                   {selectedBarberId === "all"
                     ? "Todos os profissionais"
-                    : (barbers.find((b) => b.userId === selectedBarberId)?.user.name ?? selectedBarberId)}
+                    : (barbers.find((b) => b.userId === selectedBarberId)?.user
+                        .name ?? selectedBarberId)}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -260,10 +289,20 @@ export default function AdminDashboardPage() {
                     <AppointmentRow
                       key={apt.id}
                       apt={apt}
-                      onConfirm={() => confirmSqueeze.mutate({ appointmentId: apt.id })}
-                      onReject={() => rejectSqueeze.mutate({ appointmentId: apt.id })}
-                      onUpdateStatus={(status) => updateStatus.mutate({ appointmentId: apt.id, status })}
-                      isPending={confirmSqueeze.isPending || rejectSqueeze.isPending || updateStatus.isPending}
+                      onConfirm={() =>
+                        confirmSqueeze.mutate({ appointmentId: apt.id })
+                      }
+                      onReject={() =>
+                        rejectSqueeze.mutate({ appointmentId: apt.id })
+                      }
+                      onUpdateStatus={(status) =>
+                        updateStatus.mutate({ appointmentId: apt.id, status })
+                      }
+                      isPending={
+                        confirmSqueeze.isPending ||
+                        rejectSqueeze.isPending ||
+                        updateStatus.isPending
+                      }
                     />
                   ))}
                 </div>
@@ -277,10 +316,18 @@ export default function AdminDashboardPage() {
               <AppointmentRow
                 key={apt.id}
                 apt={apt}
-                onConfirm={() => confirmSqueeze.mutate({ appointmentId: apt.id })}
+                onConfirm={() =>
+                  confirmSqueeze.mutate({ appointmentId: apt.id })
+                }
                 onReject={() => rejectSqueeze.mutate({ appointmentId: apt.id })}
-                onUpdateStatus={(status) => updateStatus.mutate({ appointmentId: apt.id, status })}
-                isPending={confirmSqueeze.isPending || rejectSqueeze.isPending || updateStatus.isPending}
+                onUpdateStatus={(status) =>
+                  updateStatus.mutate({ appointmentId: apt.id, status })
+                }
+                isPending={
+                  confirmSqueeze.isPending ||
+                  rejectSqueeze.isPending ||
+                  updateStatus.isPending
+                }
               />
             ))}
           </div>
@@ -317,15 +364,23 @@ function AppointmentRow({
   onUpdateStatus: (status: "completed" | "cancelled" | "no-show") => void;
   isPending: boolean;
 }) {
-  const status = STATUS_MAP[apt.status] ?? { label: apt.status, variant: "outline" as const };
-  const isPendingSqueeze = apt.type === "squeeze_in" && apt.status === "pending_confirmation";
+  const status = STATUS_MAP[apt.status] ?? {
+    label: apt.status,
+    variant: "outline" as const,
+  };
+  const isPendingSqueeze =
+    apt.type === "squeeze_in" && apt.status === "pending_confirmation";
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-start gap-3">
         <div className="flex flex-col items-center rounded-lg bg-muted px-3 py-2 text-center">
-          <span className="text-xs text-muted-foreground">{formatDate(apt.startsAt)}</span>
-          <span className="text-base font-bold tabular-nums">{formatTime(apt.startsAt)}</span>
+          <span className="text-xs text-muted-foreground">
+            {formatDate(apt.startsAt)}
+          </span>
+          <span className="text-base font-bold tabular-nums">
+            {formatTime(apt.startsAt)}
+          </span>
         </div>
         <div>
           <div className="font-medium">{apt.customerName}</div>
@@ -346,21 +401,41 @@ function AppointmentRow({
               <Check className="mr-1 h-3.5 w-3.5" />
               Confirmar
             </Button>
-            <Button size="sm" variant="destructive" onClick={onReject} disabled={isPending}>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={onReject}
+              disabled={isPending}
+            >
               <X className="mr-1 h-3.5 w-3.5" />
               Recusar
             </Button>
           </div>
         ) : apt.status === "scheduled" ? (
           <div className="flex gap-1">
-            <Button size="sm" variant="secondary" onClick={() => onUpdateStatus("completed")} disabled={isPending}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => onUpdateStatus("completed")}
+              disabled={isPending}
+            >
               <Check className="mr-1 h-3.5 w-3.5" />
               Concluído
             </Button>
-            <Button size="sm" variant="outline" onClick={() => onUpdateStatus("no-show")} disabled={isPending}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onUpdateStatus("no-show")}
+              disabled={isPending}
+            >
               Não compareceu
             </Button>
-            <Button size="sm" variant="destructive" onClick={() => onUpdateStatus("cancelled")} disabled={isPending}>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => onUpdateStatus("cancelled")}
+              disabled={isPending}
+            >
               <X className="mr-1 h-3.5 w-3.5" />
               Cancelar
             </Button>

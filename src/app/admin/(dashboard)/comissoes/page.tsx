@@ -221,8 +221,8 @@ export default function ComissoesPage() {
           <DialogHeader>
             <DialogTitle>Nova Comissão</DialogTitle>
             <DialogDescription>
-              Configure a comissão de um profissional para um serviço ou produto.
-              Se já existir, será atualizada.
+              Configure a comissão de um profissional para um serviço ou
+              produto. Se já existir, será atualizada.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={onSubmit} className="space-y-4">
@@ -230,7 +230,12 @@ export default function ComissoesPage() {
               <Label>Profissional</Label>
               <Select value={professionalId} onValueChange={setProfessionalId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione..." />
+                  <SelectValue placeholder="Selecione...">
+                    {professionalId
+                      ? (members.find((m) => m.userId === professionalId)?.user
+                          .name ?? professionalId)
+                      : undefined}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {members.map((m) => (
@@ -265,7 +270,12 @@ export default function ComissoesPage() {
                 <Label>Referência</Label>
                 <Select value={referenceId} onValueChange={setReferenceId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecione..." />
+                    <SelectValue placeholder="Selecione...">
+                      {referenceId
+                        ? (referenceOptions.find((r) => r.id === referenceId)
+                            ?.name ?? referenceId)
+                        : undefined}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {referenceOptions.map((r) => (
@@ -333,9 +343,7 @@ export default function ComissoesPage() {
               <Button
                 type="submit"
                 disabled={
-                  upsertMutation.isPending ||
-                  !professionalId ||
-                  !referenceId
+                  upsertMutation.isPending || !professionalId || !referenceId
                 }
               >
                 {upsertMutation.isPending ? "Salvando..." : "Salvar"}

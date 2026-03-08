@@ -1,5 +1,6 @@
 import { AdminAuthGuard } from "../_components/admin-auth-guard";
 import { AdminLayoutShell } from "../_components/admin-sidebar";
+import { RoleRouteGuard } from "../_components/role-route-guard";
 
 export default function AdminDashboardLayout({
   children,
@@ -8,7 +9,9 @@ export default function AdminDashboardLayout({
 }) {
   return (
     <AdminAuthGuard>
-      <AdminLayoutShell>{children}</AdminLayoutShell>
+      <AdminLayoutShell>
+        <RoleRouteGuard>{children}</RoleRouteGuard>
+      </AdminLayoutShell>
     </AdminAuthGuard>
   );
 }

@@ -7,18 +7,22 @@ import {
   createServiceSchema,
   updateServiceSchema,
 } from "@/domains/admin/schemas/service.schema";
+import {
+  createCustomerSchema,
+  updateCustomerSchema,
+} from "@/domains/admin/schemas/customer.schema";
 import { ORG_ROLES } from "@/lib/permissions";
 
 const getService = () => container.get<IAdminService>(TYPES.AdminService);
 
 export const adminRouter = createTRPCRouter({
   // ─── Dashboard ─────────────────────────────────────────────────────────────
-  getDashboardStats: orgProcedure.query(({ ctx }) =>
+  getDashboardStats: orgAdminProcedure.query(({ ctx }) =>
     getService().getDashboardStats(ctx.orgId),
   ),
 
   // ─── Services ──────────────────────────────────────────────────────────────
-  listServices: orgProcedure.query(({ ctx }) =>
+  listServices: orgAdminProcedure.query(({ ctx }) =>
     getService().listServices(ctx.orgId),
   ),
 
@@ -37,9 +41,32 @@ export const adminRouter = createTRPCRouter({
     ),
 
   // ─── Customers ─────────────────────────────────────────────────────────────
-  listCustomers: orgProcedure.query(({ ctx }) =>
+  listCustomers: orgAdminProcedure.query(({ ctx }) =>
     getService().listCustomers(ctx.orgId),
   ),
+
+  createCustomer: orgAdminProcedure
+    .input(createCustomerSchema)
+    .mutation(({ ctx, input }) =>
+      getService().createCustomer(ctx.orgId, input),
+    ),
+
+  updateCustomer: orgAdminProcedure
+    .input(updateCustomerSchema)
+    .mutation(({ ctx, input }) =>
+      getService().updateCustomer(ctx.orgId, input),
+    ),
+
+  // ─── Users ─────────────────────────────────────────────────────────────────
+  listOrgMembers: orgProcedure.query(({ ctx }) =>
+    getService().listOrgMembers(ctx.orgId),
+  ),
+
+  toggleUserBan: orgAdminProcedure
+    .input(z.object({ userId: z.string(), banned: z.boolean() }))
+    .mutation(({ input }) =>
+      getService().toggleUserBan(input.userId, input.banned),
+    ),
 
   // ─── Appointments ──────────────────────────────────────────────────────────
   listAppointments: orgProcedure

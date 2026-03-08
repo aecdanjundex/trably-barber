@@ -19,6 +19,8 @@ import {
   CreditCard,
   Percent,
   Zap,
+  BarChart3,
+  Wallet,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -40,7 +42,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { clientEnv } from "@/lib/env/client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { BARBER_ALLOWED_ROUTES } from "@/lib/permissions";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Dono",
@@ -49,13 +52,23 @@ const ROLE_LABELS: Record<string, string> = {
   member: "Membro",
 };
 
-const navItems = [
+const allNavItems = [
   { title: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { title: "Ordens de Serviço", href: "/admin/ordens", icon: ClipboardList },
   { title: "Serviços", href: "/admin/servicos", icon: Scissors },
   { title: "Produtos", href: "/admin/produtos", icon: Package },
-  { title: "Formas de Pagamento", href: "/admin/formas-pagamento", icon: CreditCard },
+  {
+    title: "Formas de Pagamento",
+    href: "/admin/formas-pagamento",
+    icon: CreditCard,
+  },
   { title: "Comissões", href: "/admin/comissoes", icon: Percent },
+  {
+    title: "Pagamento de Comissões",
+    href: "/admin/pagamento-comissoes",
+    icon: Wallet,
+  },
+  { title: "Relatórios", href: "/admin/relatorios", icon: BarChart3 },
   { title: "Itens Rápidos", href: "/admin/itens-rapidos", icon: Zap },
   { title: "Equipe", href: "/admin/equipe", icon: Users },
   { title: "Agenda", href: "/admin/agenda", icon: Clock },
@@ -67,7 +80,7 @@ export function AdminSidebar() {
   const router = useRouter();
   const { data: session } = useSession();
 
-  const { data: activeMember } = useQuery({
+  const { data: activeMember, isLoading: isLoadingMember } = useQuery({
     queryKey: ["active-member"],
     queryFn: async () => {
       const result = await authClient.organization.getActiveMember();
@@ -75,6 +88,16 @@ export function AdminSidebar() {
     },
     enabled: !!session?.user,
   });
+
+  const navItems = useMemo(() => {
+    if (isLoadingMember) return [];
+    if (activeMember?.role === "barber") {
+      return allNavItems.filter((item) =>
+        (BARBER_ALLOWED_ROUTES as readonly string[]).includes(item.href),
+      );
+    }
+    return allNavItems;
+  }, [activeMember?.role, isLoadingMember]);
 
   return (
     <Sidebar>

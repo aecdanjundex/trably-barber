@@ -16,6 +16,7 @@ import type {
   AddPaymentInput,
   CreateQuickItemInput,
   UpdateQuickItemInput,
+  GenerateCommissionPaymentInput,
 } from "../schemas/service-order.schema";
 
 @injectable()
@@ -107,7 +108,10 @@ class ServiceOrderService implements IServiceOrderService {
     let unitPriceInCents: number;
 
     if (input.itemType === "service") {
-      const svc = await this.repository.getServiceReference(orgId, input.referenceId);
+      const svc = await this.repository.getServiceReference(
+        orgId,
+        input.referenceId,
+      );
       if (!svc) throw new Error("Servi\u00e7o n\u00e3o encontrado");
       name = svc.name;
       unitPriceInCents = svc.priceInCents;
@@ -197,6 +201,113 @@ class ServiceOrderService implements IServiceOrderService {
 
   async deleteQuickItem(orgId: string, id: string) {
     return this.repository.deleteQuickItem(orgId, id);
+  }
+
+  // ─── Reports ─────────────────────────────────────────────────────────────
+
+  async getReportTotalInvoiced(orgId: string, from: Date, to: Date) {
+    return this.repository.getReportTotalInvoiced(orgId, from, to);
+  }
+
+  async getReportAverageTicket(orgId: string, from: Date, to: Date) {
+    return this.repository.getReportAverageTicket(orgId, from, to);
+  }
+
+  async getReportByPaymentMethod(orgId: string, from: Date, to: Date) {
+    return this.repository.getReportByPaymentMethod(orgId, from, to);
+  }
+
+  async getReportByProfessional(orgId: string, from: Date, to: Date) {
+    return this.repository.getReportByProfessional(orgId, from, to);
+  }
+
+  async getReportByProduct(orgId: string, from: Date, to: Date) {
+    return this.repository.getReportByProduct(orgId, from, to);
+  }
+
+  async getReportByService(orgId: string, from: Date, to: Date) {
+    return this.repository.getReportByService(orgId, from, to);
+  }
+
+  // ─── Commission Payments ─────────────────────────────────────────────────
+
+  async listCommissionPayments(
+    orgId: string,
+    filters?: { professionalId?: string; status?: string },
+  ) {
+    return this.repository.listCommissionPayments(orgId, filters);
+  }
+
+  async getCommissionPayment(orgId: string, id: string) {
+    return this.repository.getCommissionPayment(orgId, id);
+  }
+
+  async generateCommissionPayment(
+    orgId: string,
+    input: GenerateCommissionPaymentInput,
+  ) {
+    // Fetch all items the professional worked on in completed orders within the period
+    const items = await this.repository.getItemsByProfessionalAndPeriod(
+      orgId,
+      input.professionalId,
+      input.periodFrom,
+      input.periodTo,
+    );
+
+    if (!items.length) {
+      throw new Error(
+        "Nenhum item encontrado para o profissional nesse período",
+      );
+    }
+
+    // Calculate commission for each item
+    const commissionItems = items.map((item) => {
+      let commissionAmountInCents: number;
+      if (item.commissionType === "fixed") {
+        commissionAmountInCents = (item.fixedValueInCents ?? 0) * item.quantity;
+      } else {
+        // percentage: basis points (1000 = 10.00%)
+        commissionAmountInCents = Math.round(
+          (item.unitPriceInCents * item.quantity * (item.percentageValue ?? 0)) /
+            10000,
+        );
+      }
+
+      return {
+        serviceOrderItemId: item.serviceOrderItemId,
+        referenceType: item.itemType,
+        referenceId: item.referenceId,
+        name: item.name,
+        quantity: item.quantity,
+        unitPriceInCents: item.unitPriceInCents,
+        commissionType: item.commissionType,
+        fixedValueInCents: item.fixedValueInCents,
+        percentageValue: item.percentageValue,
+        commissionAmountInCents,
+      };
+    });
+
+    const totalCommissionInCents = commissionItems.reduce(
+      (sum, i) => sum + i.commissionAmountInCents,
+      0,
+    );
+
+    return this.repository.createCommissionPayment({
+      organizationId: orgId,
+      professionalId: input.professionalId,
+      periodFrom: input.periodFrom,
+      periodTo: input.periodTo,
+      totalCommissionInCents,
+      items: commissionItems,
+    });
+  }
+
+  async updateCommissionPaymentStatus(
+    orgId: string,
+    id: string,
+    status: string,
+  ) {
+    return this.repository.updateCommissionPaymentStatus(orgId, id, status);
   }
 }
 

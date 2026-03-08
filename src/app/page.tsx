@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const features = [
   {
@@ -83,10 +84,15 @@ export default function HomePage() {
             <span className="text-xl font-bold">Trably Barber</span>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" render={<Link href="/admin/login" />}>
+            <ThemeToggle />
+            <Button
+              variant="ghost"
+              nativeButton={false}
+              render={<Link href="/admin/login" />}
+            >
               Entrar
             </Button>
-            <Button render={<Link href="/cadastro" />}>
+            <Button nativeButton={false} render={<Link href="/cadastro" />}>
               Cadastrar barbearia
             </Button>
           </div>
@@ -108,10 +114,19 @@ export default function HomePage() {
           completo. Tudo que sua barbearia precisa em um só lugar.
         </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <Button size="lg" render={<Link href="/cadastro" />}>
+          <Button
+            size="lg"
+            nativeButton={false}
+            render={<Link href="/cadastro" />}
+          >
             Cadastrar minha barbearia
           </Button>
-          <Button size="lg" variant="outline" render={<a href="#planos" />}>
+          <Button
+            size="lg"
+            variant="outline"
+            nativeButton={false}
+            render={<a href="#planos" />}
+          >
             Ver planos
           </Button>
         </div>
@@ -190,6 +205,7 @@ export default function HomePage() {
                   <Button
                     className="w-full"
                     variant={plan.highlighted ? "default" : "outline"}
+                    nativeButton={false}
                     render={<Link href="/cadastro" />}
                   >
                     {plan.cta}

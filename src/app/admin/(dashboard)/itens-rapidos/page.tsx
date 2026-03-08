@@ -152,9 +152,7 @@ export default function QuickItemsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Itens Rápidos
-          </h1>
+          <h1 className="text-3xl font-bold tracking-tight">Itens Rápidos</h1>
           <p className="text-muted-foreground">
             Configure atalhos para adicionar itens rapidamente nas ordens
           </p>
@@ -173,9 +171,7 @@ export default function QuickItemsPage() {
         </div>
       ) : !quickItems?.length ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-          <p className="text-muted-foreground">
-            Nenhum item rápido cadastrado
-          </p>
+          <p className="text-muted-foreground">Nenhum item rápido cadastrado</p>
           <Button variant="outline" className="mt-4" onClick={openCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Adicionar primeiro item rápido
@@ -206,9 +202,7 @@ export default function QuickItemsPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>{qi.referenceName}</TableCell>
-                  <TableCell>
-                    {formatPrice(qi.referencePriceInCents)}
-                  </TableCell>
+                  <TableCell>{formatPrice(qi.referencePriceInCents)}</TableCell>
                   <TableCell>
                     <span className="text-sm text-muted-foreground">
                       {qi.active ? "Sim" : "Não"}
@@ -281,7 +275,12 @@ export default function QuickItemsPage() {
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
+                      <SelectValue placeholder="Selecione...">
+                        {referenceId
+                          ? (referenceOptions.find((r) => r.id === referenceId)
+                              ?.name ?? referenceId)
+                          : undefined}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {referenceOptions.map((r) => (
