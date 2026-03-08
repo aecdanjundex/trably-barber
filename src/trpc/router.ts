@@ -13,6 +13,7 @@ import { customerBookingRouter } from "./routers/customer-booking";
 import { adminRouter } from "./routers/admin";
 import { schedulingRouter } from "./routers/scheduling";
 import { serviceOrderRouter } from "./routers/service-order";
+import { subscriptionRouter } from "./routers/subscription";
 import { db } from "@/lib/db";
 import { invitation, organization } from "@/db/schema";
 
@@ -56,6 +57,7 @@ export const appRouter = createTRPCRouter({
   admin: adminRouter,
   scheduling: schedulingRouter,
   serviceOrder: serviceOrderRouter,
+  subscription: subscriptionRouter,
 });
 
 export type AppRouter = typeof appRouter;

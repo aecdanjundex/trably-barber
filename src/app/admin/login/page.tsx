@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Scissors } from "lucide-react";
@@ -30,7 +29,6 @@ type LoginValues = z.infer<typeof loginSchema>;
 type SignupValues = z.infer<typeof signupSchema>;
 
 export default function AdminLoginPage() {
-  const router = useRouter();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -49,7 +47,7 @@ export default function AdminLoginPage() {
       if (result.error) {
         setError(result.error.message ?? "Erro ao fazer login");
       } else {
-        router.push("/admin");
+        window.location.href = "/admin";
       }
     } catch {
       setError("Erro ao fazer login");
@@ -70,7 +68,7 @@ export default function AdminLoginPage() {
       if (result.error) {
         setError(result.error.message ?? "Erro ao criar conta");
       } else {
-        router.push("/admin");
+        window.location.href = "/admin";
       }
     } catch {
       setError("Erro ao criar conta");

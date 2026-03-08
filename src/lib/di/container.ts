@@ -18,6 +18,10 @@ import { ServiceOrderRepository } from "@/domains/service-order/repositories/ser
 import { ServiceOrderService } from "@/domains/service-order/services/service-order.service";
 import type { IServiceOrderRepository } from "@/domains/service-order/interfaces/service-order.repository.interface";
 import type { IServiceOrderService } from "@/domains/service-order/interfaces/service-order.service.interface";
+import { SubscriptionRepository } from "@/domains/subscription/repositories/subscription.repository";
+import { SubscriptionService } from "@/domains/subscription/services/subscription.service";
+import type { ISubscriptionRepository } from "@/domains/subscription/interfaces/subscription.repository.interface";
+import type { ISubscriptionService } from "@/domains/subscription/interfaces/subscription.service.interface";
 
 const container = new Container();
 
@@ -61,6 +65,16 @@ container
 container
   .bind<IServiceOrderService>(TYPES.ServiceOrderService)
   .to(ServiceOrderService)
+  .inSingletonScope();
+
+container
+  .bind<ISubscriptionRepository>(TYPES.SubscriptionRepository)
+  .to(SubscriptionRepository)
+  .inSingletonScope();
+
+container
+  .bind<ISubscriptionService>(TYPES.SubscriptionService)
+  .to(SubscriptionService)
   .inSingletonScope();
 
 export { container };

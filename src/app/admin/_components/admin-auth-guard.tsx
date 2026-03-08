@@ -32,7 +32,10 @@ export function AdminAuthGuard({ children }: { children: React.ReactNode }) {
           if (orgs && orgs.length > 0) {
             authClient.organization
               .setActive({ organizationId: orgs[0].id })
-              .then(() => setOrgReady(true));
+              .then(() => {
+                // Full reload so the session cookie reflects the new activeOrganizationId
+                window.location.reload();
+              });
           } else {
             // No organization — redirect to registration
             router.replace("/cadastro");

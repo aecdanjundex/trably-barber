@@ -6,6 +6,7 @@ import {
   timestamp,
   unique,
   index,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
@@ -70,7 +71,20 @@ export const organization = pgTable("organization", {
   logo: text("logo"),
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
+  /** "free" | "trial" | "basic" | "premium" */
   plan: text("plan").notNull().default("free"),
+  /** "monthly" | "annual" — null for free/trial */
+  planInterval: text("plan_interval"),
+  /** Stripe customer ID */
+  stripeCustomerId: text("stripe_customer_id"),
+  /** Stripe subscription ID */
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  /** "active" | "trialing" | "past_due" | "canceled" | "unpaid" | null */
+  subscriptionStatus: text("subscription_status"),
+  /** When the trial period ends */
+  trialEndsAt: timestamp("trial_ends_at"),
+  /** When the current subscription period ends */
+  currentPeriodEndsAt: timestamp("current_period_ends_at"),
 });
 
 export const member = pgTable("member", {
@@ -421,9 +435,7 @@ export const serviceOrderItemProfessional = pgTable(
   "service_order_item_professional",
   {
     id: text("id").primaryKey(),
-    serviceOrderItemId: text("service_order_item_id")
-      .notNull()
-      .references(() => serviceOrderItem.id, { onDelete: "cascade" }),
+    serviceOrderItemId: text("service_order_item_id").notNull(),
     /** The professional who executed this item */
     professionalId: text("professional_id")
       .notNull()
@@ -437,6 +449,11 @@ export const serviceOrderItemProfessional = pgTable(
     createdAt: timestamp("created_at").notNull(),
   },
   (t) => [
+    foreignKey({
+      name: "soi_professional_soi_fk",
+      columns: [t.serviceOrderItemId],
+      foreignColumns: [serviceOrderItem.id],
+    }).onDelete("cascade"),
     index("so_item_professional_item_idx").on(t.serviceOrderItemId),
     index("so_item_professional_user_idx").on(t.professionalId),
   ],
@@ -495,6 +512,42 @@ export const quickItem = pgTable(
   (t) => [index("quick_item_org_idx").on(t.organizationId)],
 );
 
+// ─── Subscription Invoices ───────────────────────────────────────────────────
+
+/**
+ * Records each billing charge from Stripe for a subscription.
+ * Created/updated when invoice.payment_succeeded or invoice.payment_failed fires.
+ */
+export const subscriptionInvoice = pgTable(
+  "subscription_invoice",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    /** Stripe invoice ID — unique to avoid duplicate records */
+    stripeInvoiceId: text("stripe_invoice_id").notNull().unique(),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    /** "basic" | "premium" */
+    plan: text("plan"),
+    /** "monthly" | "annual" */
+    planInterval: text("plan_interval"),
+    /** Amount charged in cents (BRL) */
+    amountInCents: integer("amount_in_cents").notNull(),
+    /** "paid" | "failed" */
+    status: text("status").notNull(),
+    /** Start of the billing period */
+    periodFrom: timestamp("period_from").notNull(),
+    /** End of the billing period */
+    periodTo: timestamp("period_to").notNull(),
+    paidAt: timestamp("paid_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("subscription_invoice_org_idx").on(t.organizationId),
+  ],
+);
+
 // ─── Commission Payments ─────────────────────────────────────────────────────
 
 /**
@@ -541,14 +594,9 @@ export const commissionPaymentItem = pgTable(
   "commission_payment_item",
   {
     id: text("id").primaryKey(),
-    commissionPaymentId: text("commission_payment_id")
-      .notNull()
-      .references(() => commissionPayment.id, { onDelete: "cascade" }),
+    commissionPaymentId: text("commission_payment_id").notNull(),
     /** Reference to the original service order item */
-    serviceOrderItemId: text("service_order_item_id").references(
-      () => serviceOrderItem.id,
-      { onDelete: "set null" },
-    ),
+    serviceOrderItemId: text("service_order_item_id"),
     /** "service" | "product" */
     referenceType: text("reference_type").notNull(),
     /** Original service or product ID */
@@ -569,6 +617,16 @@ export const commissionPaymentItem = pgTable(
     createdAt: timestamp("created_at").notNull(),
   },
   (t) => [
+    foreignKey({
+      name: "cp_item_cp_fk",
+      columns: [t.commissionPaymentId],
+      foreignColumns: [commissionPayment.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "cp_item_soi_fk",
+      columns: [t.serviceOrderItemId],
+      foreignColumns: [serviceOrderItem.id],
+    }).onDelete("set null"),
     index("commission_payment_item_payment_idx").on(t.commissionPaymentId),
   ],
 );

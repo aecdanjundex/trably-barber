@@ -21,6 +21,7 @@ import {
   Zap,
   BarChart3,
   Wallet,
+  Receipt,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -74,6 +75,7 @@ const allNavItems = [
   { title: "Agenda", href: "/admin/agenda", icon: Clock },
   { title: "Agendamentos", href: "/admin/agendamentos", icon: CalendarDays },
   { title: "Clientes", href: "/admin/clientes", icon: UserCircle },
+  { title: "Assinatura", href: "/admin/assinatura", icon: Receipt },
 ];
 
 export function AdminSidebar() {
