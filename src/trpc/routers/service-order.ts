@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { createTRPCRouter, orgAdminProcedure, orgProcedure } from "@/trpc/init";
+import {
+  createTRPCRouter,
+  orgAdminProcedure,
+  orgProcedure,
+  premiumOrgProcedure,
+  premiumOrgAdminProcedure,
+} from "@/trpc/init";
 import { container } from "@/lib/di/container";
 import { TYPES } from "@/lib/di/types";
 import type { IServiceOrderService } from "@/domains/service-order/interfaces/service-order.service.interface";
@@ -70,17 +76,17 @@ export const serviceOrderRouter = createTRPCRouter({
     ),
 
   // ─── Commission Config ─────────────────────────────────────────────────────
-  listCommissionConfigs: orgAdminProcedure.query(({ ctx }) =>
+  listCommissionConfigs: premiumOrgAdminProcedure.query(({ ctx }) =>
     getService().listCommissionConfigs(ctx.orgId),
   ),
 
-  upsertCommissionConfig: orgAdminProcedure
+  upsertCommissionConfig: premiumOrgAdminProcedure
     .input(upsertCommissionConfigSchema)
     .mutation(({ ctx, input }) =>
       getService().upsertCommissionConfig(ctx.orgId, input),
     ),
 
-  deleteCommissionConfig: orgAdminProcedure
+  deleteCommissionConfig: premiumOrgAdminProcedure
     .input(z.object({ id: z.string() }))
     .mutation(({ ctx, input }) =>
       getService().deleteCommissionConfig(ctx.orgId, input.id),
@@ -211,7 +217,7 @@ export const serviceOrderRouter = createTRPCRouter({
     ),
 
   // ─── Commission Payments ───────────────────────────────────────────────────
-  listCommissionPayments: orgProcedure
+  listCommissionPayments: premiumOrgProcedure
     .input(
       z
         .object({
@@ -231,7 +237,7 @@ export const serviceOrderRouter = createTRPCRouter({
       });
     }),
 
-  getCommissionPayment: orgProcedure
+  getCommissionPayment: premiumOrgProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
       const payment = await getService().getCommissionPayment(
@@ -250,13 +256,13 @@ export const serviceOrderRouter = createTRPCRouter({
       return payment;
     }),
 
-  generateCommissionPayment: orgAdminProcedure
+  generateCommissionPayment: premiumOrgAdminProcedure
     .input(generateCommissionPaymentSchema)
     .mutation(({ ctx, input }) =>
       getService().generateCommissionPayment(ctx.orgId, input),
     ),
 
-  updateCommissionPaymentStatus: orgAdminProcedure
+  updateCommissionPaymentStatus: premiumOrgAdminProcedure
     .input(updateCommissionPaymentStatusSchema)
     .mutation(({ ctx, input }) =>
       getService().updateCommissionPaymentStatus(

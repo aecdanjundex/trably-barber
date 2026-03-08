@@ -83,6 +83,8 @@ export const organization = pgTable("organization", {
   subscriptionStatus: text("subscription_status"),
   /** When the trial period ends */
   trialEndsAt: timestamp("trial_ends_at"),
+  /** When the current subscription period starts */
+  currentPeriodStartsAt: timestamp("current_period_starts_at"),
   /** When the current subscription period ends */
   currentPeriodEndsAt: timestamp("current_period_ends_at"),
 });

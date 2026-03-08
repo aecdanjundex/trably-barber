@@ -1,9 +1,17 @@
-import type { PlanInfo, SubscriptionInvoice } from "../types";
+import type { Plan, PlanInfo, PlanInterval, SubscriptionInvoice } from "../types";
 
 interface ISubscriptionService {
   getPlanInfo(orgId: string): Promise<PlanInfo | null>;
 
   startTrial(orgId: string): Promise<void>;
+
+  createCheckoutSession(
+    orgId: string,
+    plan: Plan,
+    interval: PlanInterval,
+    successUrl: string,
+    cancelUrl: string,
+  ): Promise<string>;
 
   createPortalSession(
     orgId: string,

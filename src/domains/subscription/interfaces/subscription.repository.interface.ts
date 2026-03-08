@@ -12,6 +12,7 @@ interface ISubscriptionRepository {
       stripeSubscriptionId: string | null;
       subscriptionStatus: string | null;
       trialEndsAt: Date | null;
+      currentPeriodStartsAt: Date | null;
       currentPeriodEndsAt: Date | null;
     }>,
   ): Promise<void>;

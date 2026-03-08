@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "current_period_starts_at" timestamp;

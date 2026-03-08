@@ -29,6 +29,7 @@ export class SubscriptionRepository implements ISubscriptionRepository {
       stripeSubscriptionId: string | null;
       subscriptionStatus: string | null;
       trialEndsAt: Date | null;
+      currentPeriodStartsAt: Date | null;
       currentPeriodEndsAt: Date | null;
     }>,
   ): Promise<void> {
@@ -57,6 +58,7 @@ export class SubscriptionRepository implements ISubscriptionRepository {
       interval: org.planInterval as PlanInterval | null,
       status: org.subscriptionStatus as SubscriptionStatus | null,
       trialEndsAt: org.trialEndsAt,
+      currentPeriodStartsAt: org.currentPeriodStartsAt,
       currentPeriodEndsAt: org.currentPeriodEndsAt,
       stripeCustomerId: org.stripeCustomerId,
       stripeSubscriptionId: org.stripeSubscriptionId,

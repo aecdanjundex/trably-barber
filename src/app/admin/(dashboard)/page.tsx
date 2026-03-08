@@ -17,6 +17,16 @@ import {
 } from "@/components/ui/select";
 import { authClient } from "@/lib/auth-client";
 import { Check, X } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -239,7 +249,7 @@ export default function AdminDashboardPage() {
           {isAdmin && barbers.length > 1 && (
             <Select
               value={selectedBarberId}
-              onValueChange={setSelectedBarberId}
+              onValueChange={(v) => setSelectedBarberId(v ?? "all")}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Filtrar profissional">
@@ -351,6 +361,48 @@ type Apt = {
   barberName: string;
 };
 
+type PendingAction =
+  | "confirm"
+  | "reject"
+  | "completed"
+  | "cancelled"
+  | "no-show"
+  | null;
+
+const ACTION_LABELS: Record<
+  NonNullable<PendingAction>,
+  { title: string; description: string; confirmLabel: string; variant?: "destructive" }
+> = {
+  confirm: {
+    title: "Confirmar encaixe",
+    description: "Deseja confirmar este encaixe?",
+    confirmLabel: "Confirmar",
+  },
+  reject: {
+    title: "Recusar encaixe",
+    description: "Deseja recusar este encaixe? O cliente será notificado.",
+    confirmLabel: "Recusar",
+    variant: "destructive",
+  },
+  completed: {
+    title: "Marcar como concluído",
+    description: "Deseja marcar este agendamento como concluído?",
+    confirmLabel: "Concluído",
+  },
+  "no-show": {
+    title: "Marcar como não compareceu",
+    description: "Deseja marcar que o cliente não compareceu?",
+    confirmLabel: "Confirmar",
+    variant: "destructive",
+  },
+  cancelled: {
+    title: "Cancelar agendamento",
+    description: "Deseja cancelar este agendamento?",
+    confirmLabel: "Cancelar",
+    variant: "destructive",
+  },
+};
+
 function AppointmentRow({
   apt,
   onConfirm,
@@ -364,6 +416,8 @@ function AppointmentRow({
   onUpdateStatus: (status: "completed" | "cancelled" | "no-show") => void;
   isPending: boolean;
 }) {
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+
   const status = STATUS_MAP[apt.status] ?? {
     label: apt.status,
     variant: "outline" as const,
@@ -371,77 +425,107 @@ function AppointmentRow({
   const isPendingSqueeze =
     apt.type === "squeeze_in" && apt.status === "pending_confirmation";
 
+  function handleConfirm() {
+    if (!pendingAction) return;
+    if (pendingAction === "confirm") onConfirm();
+    else if (pendingAction === "reject") onReject();
+    else onUpdateStatus(pendingAction);
+    setPendingAction(null);
+  }
+
+  const actionInfo = pendingAction ? ACTION_LABELS[pendingAction] : null;
+
   return (
-    <div className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-3">
-        <div className="flex flex-col items-center rounded-lg bg-muted px-3 py-2 text-center">
-          <span className="text-xs text-muted-foreground">
-            {formatDate(apt.startsAt)}
-          </span>
-          <span className="text-base font-bold tabular-nums">
-            {formatTime(apt.startsAt)}
-          </span>
-        </div>
-        <div>
-          <div className="font-medium">{apt.customerName}</div>
-          <div className="text-sm text-muted-foreground">{apt.serviceName}</div>
-          <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Clock className="h-3 w-3" />
-            {formatTime(apt.startsAt)} – {formatTime(apt.endsAt)}
+    <>
+      <AlertDialog open={!!pendingAction} onOpenChange={(open) => { if (!open) setPendingAction(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{actionInfo?.title}</AlertDialogTitle>
+            <AlertDialogDescription>{actionInfo?.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              variant={actionInfo?.variant ?? "default"}
+              onClick={handleConfirm}
+            >
+              {actionInfo?.confirmLabel}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <div className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="flex flex-col items-center rounded-lg bg-muted px-3 py-2 text-center">
+            <span className="text-xs text-muted-foreground">
+              {formatDate(apt.startsAt)}
+            </span>
+            <span className="text-base font-bold tabular-nums">
+              {formatTime(apt.startsAt)}
+            </span>
           </div>
+          <div>
+            <div className="font-medium">{apt.customerName}</div>
+            <div className="text-sm text-muted-foreground">{apt.serviceName}</div>
+            <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Clock className="h-3 w-3" />
+              {formatTime(apt.startsAt)} – {formatTime(apt.endsAt)}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Badge variant={status.variant}>{status.label}</Badge>
+
+          {isPendingSqueeze ? (
+            <div className="flex gap-1">
+              <Button size="sm" onClick={() => setPendingAction("confirm")} disabled={isPending}>
+                <Check className="mr-1 h-3.5 w-3.5" />
+                Confirmar
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setPendingAction("reject")}
+                disabled={isPending}
+              >
+                <X className="mr-1 h-3.5 w-3.5" />
+                Recusar
+              </Button>
+            </div>
+          ) : apt.status === "scheduled" ? (
+            <div className="flex gap-1">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setPendingAction("completed")}
+                disabled={isPending}
+              >
+                <Check className="mr-1 h-3.5 w-3.5" />
+                Concluído
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPendingAction("no-show")}
+                disabled={isPending}
+              >
+                Não compareceu
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setPendingAction("cancelled")}
+                disabled={isPending}
+              >
+                <X className="mr-1 h-3.5 w-3.5" />
+                Cancelar
+              </Button>
+            </div>
+          ) : null}
         </div>
       </div>
-
-      <div className="flex items-center gap-2">
-        <Badge variant={status.variant}>{status.label}</Badge>
-
-        {isPendingSqueeze ? (
-          <div className="flex gap-1">
-            <Button size="sm" onClick={onConfirm} disabled={isPending}>
-              <Check className="mr-1 h-3.5 w-3.5" />
-              Confirmar
-            </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={onReject}
-              disabled={isPending}
-            >
-              <X className="mr-1 h-3.5 w-3.5" />
-              Recusar
-            </Button>
-          </div>
-        ) : apt.status === "scheduled" ? (
-          <div className="flex gap-1">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => onUpdateStatus("completed")}
-              disabled={isPending}
-            >
-              <Check className="mr-1 h-3.5 w-3.5" />
-              Concluído
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onUpdateStatus("no-show")}
-              disabled={isPending}
-            >
-              Não compareceu
-            </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => onUpdateStatus("cancelled")}
-              disabled={isPending}
-            >
-              <X className="mr-1 h-3.5 w-3.5" />
-              Cancelar
-            </Button>
-          </div>
-        ) : null}
-      </div>
-    </div>
+    </>
   );
 }

@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   member,
+  organization,
   customer as customerTable,
   customerSession as customerSessionTable,
 } from "@/db/schema";
@@ -164,3 +165,32 @@ export const orgAdminProcedure = orgProcedure.use(({ ctx, next }) => {
   }
   return next({ ctx });
 });
+
+async function checkPremiumPlan(orgId: string): Promise<void> {
+  const [org] = await db
+    .select({ plan: organization.plan })
+    .from(organization)
+    .where(eq(organization.id, orgId))
+    .limit(1);
+  if (org?.plan !== "premium") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "PREMIUM_REQUIRED" });
+  }
+}
+
+/**
+ * Premium org procedure — requires active org membership AND premium plan.
+ */
+export const premiumOrgProcedure = orgProcedure.use(async ({ ctx, next }) => {
+  await checkPremiumPlan(ctx.orgId);
+  return next({ ctx });
+});
+
+/**
+ * Premium org admin procedure — requires org admin role AND premium plan.
+ */
+export const premiumOrgAdminProcedure = orgAdminProcedure.use(
+  async ({ ctx, next }) => {
+    await checkPremiumPlan(ctx.orgId);
+    return next({ ctx });
+  },
+);

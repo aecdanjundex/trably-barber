@@ -15,6 +15,9 @@ import {
   RotateCcw,
   CheckCircle2,
   XCircle,
+  Lock,
+  ChevronsUpDown,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +39,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -47,6 +60,16 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 
 function formatPrice(cents: number) {
@@ -98,6 +121,10 @@ export default function OrdemDetalhe({
     trpc.serviceOrder.listQuickItems.queryOptions(),
   );
   const { data: customers } = useQuery(trpc.admin.listCustomers.queryOptions());
+  const { data: planData } = useQuery(
+    trpc.subscription.getCurrentPlan.queryOptions(),
+  );
+  const isPremium = planData?.plan === "premium";
   const { data: org } = useQuery({
     queryKey: ["active-organization"],
     queryFn: async () => {
@@ -179,6 +206,10 @@ export default function OrdemDetalhe({
   const [itemQuantity, setItemQuantity] = useState("1");
   const [itemNotes, setItemNotes] = useState("");
   const [itemProfessionalIds, setItemProfessionalIds] = useState<string[]>([]);
+  const [itemComboOpen, setItemComboOpen] = useState(false);
+  const [itemSearch, setItemSearch] = useState("");
+  const [customerComboOpen, setCustomerComboOpen] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
 
   function resetItemForm() {
     setItemType("service");
@@ -186,6 +217,7 @@ export default function OrdemDetalhe({
     setItemQuantity("1");
     setItemNotes("");
     setItemProfessionalIds([]);
+    setItemSearch("");
   }
 
   function submitItem(e: React.FormEvent) {
@@ -259,6 +291,7 @@ export default function OrdemDetalhe({
 
   // ─── Payment dialog state ─────────────────────────────────────────────────
 
+  const [removePaymentId, setRemovePaymentId] = useState<string | null>(null);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentMethodId, setPaymentMethodId] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -439,32 +472,81 @@ export default function OrdemDetalhe({
           <CardTitle className="text-lg">Cliente</CardTitle>
         </CardHeader>
         <CardContent>
-          <Select
-            value={order.customerId ?? "none"}
-            onValueChange={(v) =>
-              updateOrderMutation.mutate({
-                id: order.id,
-                customerId: v === "none" ? null : v,
-              })
-            }
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione um cliente...">
-                {order.customerId
-                  ? ((customers ?? []).find((c) => c.id === order.customerId)
-                      ?.name ?? order.customerId)
-                  : "Sem cliente"}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Sem cliente</SelectItem>
-              {(customers ?? []).map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name} — {c.phone}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Popover open={customerComboOpen} onOpenChange={setCustomerComboOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                role="combobox"
+                className="w-full justify-between font-normal"
+              >
+                <span className="truncate">
+                  {order.customerId
+                    ? (() => {
+                        const c = (customers ?? []).find((c) => c.id === order.customerId);
+                        return c
+                          ? `${c.name}${c.phone ? ` — ${c.phone}` : ""}`
+                          : order.customerId;
+                      })()
+                    : "Sem cliente"}
+                </span>
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+              <Command>
+                <CommandInput
+                  placeholder="Buscar cliente..."
+                  value={customerSearch}
+                  onValueChange={setCustomerSearch}
+                />
+                <CommandList>
+                  <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem
+                      value="__none__"
+                      onSelect={() => {
+                        updateOrderMutation.mutate({ id: order.id, customerId: null });
+                        setCustomerComboOpen(false);
+                        setCustomerSearch("");
+                      }}
+                    >
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          !order.customerId ? "opacity-100" : "opacity-0",
+                        )}
+                      />
+                      Sem cliente
+                    </CommandItem>
+                    {(customers ?? [])
+                      .filter((c) =>
+                        `${c.name} ${c.phone ?? ""}`.toLowerCase().includes(customerSearch.toLowerCase()),
+                      )
+                      .map((c) => (
+                        <CommandItem
+                          key={c.id}
+                          value={c.id}
+                          onSelect={() => {
+                            updateOrderMutation.mutate({ id: order.id, customerId: c.id });
+                            setCustomerComboOpen(false);
+                            setCustomerSearch("");
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              order.customerId === c.id ? "opacity-100" : "opacity-0",
+                            )}
+                          />
+                          {c.name}{c.phone ? ` — ${c.phone}` : ""}
+                        </CommandItem>
+                      ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </CardContent>
       </Card>
 
@@ -672,9 +754,7 @@ export default function OrdemDetalhe({
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() =>
-                          removePaymentMutation.mutate({ id: p.id })
-                        }
+                        onClick={() => setRemovePaymentId(p.id)}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
@@ -735,10 +815,13 @@ export default function OrdemDetalhe({
                   onValueChange={(v) => {
                     setItemType(v as "service" | "product");
                     setItemReferenceId("");
+                    setItemSearch("");
                   }}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue />
+                    <SelectValue>
+                      {itemType === "service" ? "Serviço" : "Produto"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="service">Serviço</SelectItem>
@@ -748,30 +831,65 @@ export default function OrdemDetalhe({
               </div>
               <div className="min-w-0 space-y-2">
                 <Label>{itemType === "service" ? "Serviço" : "Produto"}</Label>
-                <Select
-                  value={itemReferenceId}
-                  onValueChange={(v) => setItemReferenceId(v ?? "")}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Selecione...">
-                      {itemReferenceId
-                        ? ((itemType === "service" ? services : products)?.find(
-                            (r) => r.id === itemReferenceId,
-                          )?.name ?? itemReferenceId)
-                        : undefined}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(itemType === "service"
-                      ? (services ?? [])
-                      : (products ?? [])
-                    ).map((r) => (
-                      <SelectItem key={r.id} value={r.id}>
-                        {r.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={itemComboOpen} onOpenChange={setItemComboOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between font-normal"
+                    >
+                      <span className="truncate">
+                        {itemReferenceId
+                          ? ((itemType === "service" ? services : products)?.find(
+                              (r) => r.id === itemReferenceId,
+                            )?.name ?? itemReferenceId)
+                          : "Selecione..."}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput
+                        placeholder="Buscar..."
+                        value={itemSearch}
+                        onValueChange={setItemSearch}
+                      />
+                      <CommandList>
+                        <CommandEmpty>Nenhum resultado.</CommandEmpty>
+                        <CommandGroup>
+                          {(itemType === "service"
+                            ? (services ?? [])
+                            : (products ?? [])
+                          )
+                            .filter((r) =>
+                              r.name.toLowerCase().includes(itemSearch.toLowerCase()),
+                            )
+                            .map((r) => (
+                              <CommandItem
+                                key={r.id}
+                                value={r.name}
+                                onSelect={() => {
+                                  setItemReferenceId(r.id);
+                                  setItemComboOpen(false);
+                                  setItemSearch("");
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    itemReferenceId === r.id ? "opacity-100" : "opacity-0",
+                                  )}
+                                />
+                                {r.name}
+                              </CommandItem>
+                            ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -785,28 +903,41 @@ export default function OrdemDetalhe({
                 />
               </div>
               <div className="min-w-0 space-y-2">
-                <Label>Profissional</Label>
-                <Select
-                  value={itemProfessionalIds[0] ?? ""}
-                  onValueChange={(v) => setItemProfessionalIds(v ? [v] : [])}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Selecione...">
-                      {itemProfessionalIds[0]
-                        ? (members.find(
-                            (m) => m.userId === itemProfessionalIds[0],
-                          )?.user.name ?? itemProfessionalIds[0])
-                        : undefined}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {members.map((m) => (
-                      <SelectItem key={m.userId} value={m.userId}>
-                        {m.user.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label className="flex items-center gap-1">
+                  Profissional
+                  {!isPremium && <Lock className="h-3 w-3 text-muted-foreground" />}
+                </Label>
+                {isPremium ? (
+                  <Select
+                    value={itemProfessionalIds[0] ?? "none"}
+                    onValueChange={(v) =>
+                      setItemProfessionalIds(v === "none" ? [] : [v])
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Selecione...">
+                        {itemProfessionalIds[0]
+                          ? (members.find(
+                              (m) => m.userId === itemProfessionalIds[0],
+                            )?.user.name ?? itemProfessionalIds[0])
+                          : "Nenhum"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum</SelectItem>
+                      {members.map((m) => (
+                        <SelectItem key={m.userId} value={m.userId}>
+                          {m.user.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="flex h-9 items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground gap-1">
+                    <Lock className="h-3 w-3" />
+                    Disponível no Premium
+                  </div>
+                )}
               </div>
             </div>
             <div className="space-y-2">
@@ -882,21 +1013,31 @@ export default function OrdemDetalhe({
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Profissionais</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    addProfessional(
-                      editItemProfessionals,
-                      setEditItemProfessionals,
-                    )
-                  }
-                >
-                  <Plus className="mr-1 h-3 w-3" />
-                  Adicionar
-                </Button>
+                <Label className="flex items-center gap-1">
+                  Profissionais
+                  {!isPremium && <Lock className="h-3 w-3 text-muted-foreground" />}
+                </Label>
+                {isPremium ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      addProfessional(
+                        editItemProfessionals,
+                        setEditItemProfessionals,
+                      )
+                    }
+                  >
+                    <Plus className="mr-1 h-3 w-3" />
+                    Adicionar
+                  </Button>
+                ) : (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Lock className="h-3 w-3" />
+                    Premium
+                  </span>
+                )}
               </div>
               {editItemProfessionals.map((p, idx) => (
                 <ProfessionalRow
@@ -1022,6 +1163,35 @@ export default function OrdemDetalhe({
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* ─── Remove Payment Confirmation ─────────────────────────────────── */}
+      <AlertDialog
+        open={!!removePaymentId}
+        onOpenChange={(open) => !open && setRemovePaymentId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover recebimento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (removePaymentId) {
+                  removePaymentMutation.mutate({ id: removePaymentId });
+                  setRemovePaymentId(null);
+                }
+              }}
+            >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useTRPC } from "@/trpc/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
-import { Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Plus, Trash2, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,9 +50,14 @@ export default function ComissoesPage() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
-  const { data: configs, isLoading } = useQuery(
-    trpc.serviceOrder.listCommissionConfigs.queryOptions(),
+  const { data: planData, isLoading: isLoadingPlan } = useQuery(
+    trpc.subscription.getCurrentPlan.queryOptions(),
   );
+
+  const { data: configs, isLoading } = useQuery({
+    ...trpc.serviceOrder.listCommissionConfigs.queryOptions(),
+    enabled: planData?.plan === "premium",
+  });
 
   const { data: services } = useQuery(trpc.admin.listServices.queryOptions());
   const { data: products } = useQuery(
@@ -141,6 +147,23 @@ export default function ComissoesPage() {
     referenceType === "service"
       ? (services ?? []).map((s) => ({ id: s.id, name: s.name }))
       : (products ?? []).map((p) => ({ id: p.id, name: p.name }));
+
+  if (!isLoadingPlan && planData?.plan !== "premium") {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-20 text-center gap-4">
+        <Lock className="h-10 w-10 text-muted-foreground" />
+        <div>
+          <h2 className="text-xl font-semibold">Recurso exclusivo do plano Premium</h2>
+          <p className="text-muted-foreground mt-1">
+            Faça upgrade para o plano Premium para configurar comissões por profissional.
+          </p>
+        </div>
+        <Button asChild>
+          <Link href="/admin/assinatura">Ver planos</Link>
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTRPC } from "@/trpc/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
+import Link from "next/link";
 import {
   Wallet,
   Plus,
@@ -11,6 +12,7 @@ import {
   CheckCircle2,
   XCircle,
   ArrowLeft,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -98,6 +100,10 @@ export default function PagamentoComissoesPage() {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
 
+  const { data: planData, isLoading: isLoadingPlan } = useQuery(
+    trpc.subscription.getCurrentPlan.queryOptions(),
+  );
+
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [professionalFilter, setProfessionalFilter] = useState<string>("all");
   const [generateOpen, setGenerateOpen] = useState(false);
@@ -129,14 +135,15 @@ export default function PagamentoComissoesPage() {
 
   const members = org?.members ?? [];
 
-  const { data: payments, isLoading } = useQuery(
-    trpc.serviceOrder.listCommissionPayments.queryOptions({
+  const { data: payments, isLoading } = useQuery({
+    ...trpc.serviceOrder.listCommissionPayments.queryOptions({
       ...(statusFilter !== "all" && { status: statusFilter }),
       ...(professionalFilter !== "all" && {
         professionalId: professionalFilter,
       }),
     }),
-  );
+    enabled: planData?.plan === "premium",
+  });
 
   const { data: detail, isLoading: loadingDetail } = useQuery({
     ...trpc.serviceOrder.getCommissionPayment.queryOptions({
@@ -179,6 +186,23 @@ export default function PagamentoComissoesPage() {
       periodFrom: new Date(genFrom),
       periodTo: new Date(genTo),
     });
+  }
+
+  if (!isLoadingPlan && planData?.plan !== "premium") {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-20 text-center gap-4">
+        <Lock className="h-10 w-10 text-muted-foreground" />
+        <div>
+          <h2 className="text-xl font-semibold">Recurso exclusivo do plano Premium</h2>
+          <p className="text-muted-foreground mt-1">
+            Faça upgrade para o plano Premium para gerenciar pagamentos de comissões.
+          </p>
+        </div>
+        <Button asChild>
+          <Link href="/admin/assinatura">Ver planos</Link>
+        </Button>
+      </div>
+    );
   }
 
   // Detail view

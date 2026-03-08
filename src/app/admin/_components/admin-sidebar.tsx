@@ -42,6 +42,7 @@ import { useSession, signOut, authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
+import { useTRPC } from "@/trpc/utils";
 import { clientEnv } from "@/lib/env/client";
 import { useState, useMemo } from "react";
 import { BARBER_ALLOWED_ROUTES } from "@/lib/permissions";
@@ -54,32 +55,35 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const allNavItems = [
-  { title: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { title: "Ordens de Serviço", href: "/admin/ordens", icon: ClipboardList },
-  { title: "Serviços", href: "/admin/servicos", icon: Scissors },
-  { title: "Produtos", href: "/admin/produtos", icon: Package },
+  { title: "Dashboard", href: "/admin", icon: LayoutDashboard, premiumOnly: false },
+  { title: "Ordens de Serviço", href: "/admin/ordens", icon: ClipboardList, premiumOnly: false },
+  { title: "Serviços", href: "/admin/servicos", icon: Scissors, premiumOnly: false },
+  { title: "Produtos", href: "/admin/produtos", icon: Package, premiumOnly: false },
   {
     title: "Formas de Pagamento",
     href: "/admin/formas-pagamento",
     icon: CreditCard,
+    premiumOnly: false,
   },
-  { title: "Comissões", href: "/admin/comissoes", icon: Percent },
+  { title: "Comissões", href: "/admin/comissoes", icon: Percent, premiumOnly: true },
   {
     title: "Pagamento de Comissões",
     href: "/admin/pagamento-comissoes",
     icon: Wallet,
+    premiumOnly: true,
   },
-  { title: "Relatórios", href: "/admin/relatorios", icon: BarChart3 },
-  { title: "Itens Rápidos", href: "/admin/itens-rapidos", icon: Zap },
-  { title: "Equipe", href: "/admin/equipe", icon: Users },
-  { title: "Agenda", href: "/admin/agenda", icon: Clock },
-  { title: "Agendamentos", href: "/admin/agendamentos", icon: CalendarDays },
-  { title: "Clientes", href: "/admin/clientes", icon: UserCircle },
-  { title: "Assinatura", href: "/admin/assinatura", icon: Receipt },
+  { title: "Relatórios", href: "/admin/relatorios", icon: BarChart3, premiumOnly: false },
+  { title: "Itens Rápidos", href: "/admin/itens-rapidos", icon: Zap, premiumOnly: false },
+  { title: "Equipe", href: "/admin/equipe", icon: Users, premiumOnly: false },
+  { title: "Agenda", href: "/admin/agenda", icon: Clock, premiumOnly: false },
+  { title: "Agendamentos", href: "/admin/agendamentos", icon: CalendarDays, premiumOnly: false },
+  { title: "Clientes", href: "/admin/clientes", icon: UserCircle, premiumOnly: false },
+  { title: "Assinatura", href: "/admin/assinatura", icon: Receipt, premiumOnly: false },
 ];
 
 export function AdminSidebar() {
   const router = useRouter();
+  const trpc = useTRPC();
   const { data: session } = useSession();
 
   const { data: activeMember, isLoading: isLoadingMember } = useQuery({
@@ -91,15 +95,25 @@ export function AdminSidebar() {
     enabled: !!session?.user,
   });
 
+  const { data: planData } = useQuery({
+    ...trpc.subscription.getCurrentPlan.queryOptions(),
+    enabled: !!session?.user,
+  });
+
+  const isPremium = planData?.plan === "premium";
+
   const navItems = useMemo(() => {
     if (isLoadingMember) return [];
+    const items = isPremium
+      ? allNavItems
+      : allNavItems.filter((item) => !item.premiumOnly);
     if (activeMember?.role === "barber") {
-      return allNavItems.filter((item) =>
+      return items.filter((item) =>
         (BARBER_ALLOWED_ROUTES as readonly string[]).includes(item.href),
       );
     }
-    return allNavItems;
-  }, [activeMember?.role, isLoadingMember]);
+    return items;
+  }, [activeMember?.role, isLoadingMember, isPremium]);
 
   return (
     <Sidebar>

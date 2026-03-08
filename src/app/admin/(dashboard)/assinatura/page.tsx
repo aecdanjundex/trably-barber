@@ -14,23 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Check, Clock, X, Zap } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import Script from "next/script";
-import { clientEnv } from "@/lib/env/client";
-
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "stripe-pricing-table": React.DetailedHTMLProps<
-        React.HTMLAttributes<HTMLElement> & {
-          "pricing-table-id": string;
-          "publishable-key": string;
-          "client-reference-id"?: string;
-        },
-        HTMLElement
-      >;
-    }
-  }
-}
+import { useState } from "react";
 
 function PlanBadge({ plan, status }: { plan: string; status: string | null }) {
   if (plan === "trial") {
@@ -58,9 +42,45 @@ function formatDate(date: Date | null | undefined) {
   );
 }
 
+const PLANS = [
+  {
+    id: "basic" as const,
+    name: "Básico",
+    description: "Para barbearias que estão começando",
+    monthlyPrice: 69,
+    annualPrice: 599,
+    annualMonthly: Math.round(599 / 12),
+    features: [
+      "Agendamentos ilimitados",
+      "Até 3 profissionais",
+      "Relatórios básicos",
+      "Suporte por e-mail",
+    ],
+  },
+  {
+    id: "premium" as const,
+    name: "Premium",
+    description: "Para barbearias em crescimento",
+    monthlyPrice: 149,
+    annualPrice: 1199,
+    annualMonthly: Math.round(1199 / 12),
+    features: [
+      "Agendamentos ilimitados",
+      "Profissionais ilimitados",
+      "Relatórios avançados",
+      "Suporte prioritário",
+      "Personalização da página",
+      "Integração com WhatsApp",
+    ],
+    highlighted: true,
+  },
+];
+
 export default function AssinaturaPage() {
   const trpc = useTRPC();
   const searchParams = useSearchParams();
+  const [interval, setInterval] = useState<"monthly" | "annual">("monthly");
+  const [checkoutPending, setCheckoutPending] = useState<string | null>(null);
 
   const { data: planInfo, isLoading } = useQuery(
     trpc.subscription.getPlanInfo.queryOptions(),
@@ -84,6 +104,15 @@ export default function AssinaturaPage() {
     }),
   );
 
+  const checkoutMutation = useMutation(
+    trpc.subscription.createCheckoutSession.mutationOptions({
+      onSuccess: ({ url }) => {
+        window.location.href = url;
+      },
+      onSettled: () => setCheckoutPending(null),
+    }),
+  );
+
   const isSuccess = searchParams.get("success") === "1";
   const isCanceled = searchParams.get("canceled") === "1";
 
@@ -94,10 +123,7 @@ export default function AssinaturaPage() {
 
   const currentPeriodInvoice = invoices.find((inv) => inv.status === "paid");
 
-  const showPricingTable =
-    !hasActivePaidPlan &&
-    clientEnv.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY &&
-    clientEnv.NEXT_PUBLIC_STRIPE_PRICING_TABLE_ID;
+  const showPricingCards = !hasActivePaidPlan;
 
   if (isLoading) {
     return (
@@ -169,16 +195,17 @@ export default function AssinaturaPage() {
             )}
             {hasActivePaidPlan && (
               <div className="space-y-1">
-                {currentPeriodInvoice && (
+                {planInfo.currentPeriodStartsAt && planInfo.currentPeriodEndsAt && (
                   <p>
                     Período atual:{" "}
                     <span className="font-medium text-foreground">
-                      {formatDate(currentPeriodInvoice.periodFrom)}
+                      {formatDate(planInfo.currentPeriodStartsAt)}
                     </span>
                     {" até "}
                     <span className="font-medium text-foreground">
-                      {formatDate(currentPeriodInvoice.periodTo)}
+                      {formatDate(planInfo.currentPeriodEndsAt)}
                     </span>
+                    {planInfo.interval === "annual" ? " · Plano anual" : " · Plano mensal"}.
                   </p>
                 )}
                 {planInfo.currentPeriodEndsAt && (
@@ -186,8 +213,7 @@ export default function AssinaturaPage() {
                     Próxima cobrança em{" "}
                     <span className="font-medium text-foreground">
                       {formatDate(planInfo.currentPeriodEndsAt)}
-                    </span>
-                    {planInfo.interval === "annual" ? " · Plano anual" : " · Plano mensal"}.
+                    </span>.
                   </p>
                 )}
               </div>
@@ -251,16 +277,109 @@ export default function AssinaturaPage() {
         </Card>
       )}
 
-      {/* Stripe Pricing Table */}
-      {showPricingTable && (
-        <>
-          <Script src="https://js.stripe.com/v3/pricing-table.js" />
-          <stripe-pricing-table
-            pricing-table-id={clientEnv.NEXT_PUBLIC_STRIPE_PRICING_TABLE_ID}
-            publishable-key={clientEnv.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
-            client-reference-id={planInfo?.orgId}
-          />
-        </>
+      {/* Pricing cards */}
+      {showPricingCards && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Escolha um plano</h2>
+            {/* Interval toggle */}
+            <div className="flex items-center gap-1 rounded-lg border p-1">
+              <button
+                onClick={() => setInterval("monthly")}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  interval === "monthly"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Mensal
+              </button>
+              <button
+                onClick={() => setInterval("annual")}
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  interval === "annual"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Anual
+                <span className={`text-xs font-semibold ${interval === "annual" ? "text-primary-foreground/80" : "text-green-600"}`}>
+                  -30%
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {PLANS.map((plan) => {
+              const price = interval === "monthly" ? plan.monthlyPrice : plan.annualMonthly;
+              const totalPrice = interval === "annual" ? plan.annualPrice : null;
+              const isCurrentPlan = planInfo?.plan === plan.id;
+              const key = `${plan.id}-${interval}`;
+
+              return (
+                <Card
+                  key={plan.id}
+                  className={plan.highlighted ? "border-primary shadow-md" : ""}
+                >
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle>{plan.name}</CardTitle>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {plan.description}
+                        </p>
+                      </div>
+                      {plan.highlighted && (
+                        <Badge className="bg-primary text-primary-foreground">
+                          Popular
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="mt-4">
+                      <span className="text-4xl font-bold">
+                        R$ {price}
+                      </span>
+                      <span className="text-muted-foreground">/mês</span>
+                      {totalPrice && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Cobrado R$ {totalPrice.toLocaleString("pt-BR")}/ano
+                        </p>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2">
+                      {plan.features.map((feature) => (
+                        <li key={feature} className="flex items-center gap-2 text-sm">
+                          <Check className="h-4 w-4 shrink-0 text-green-500" />
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                  <CardFooter>
+                    <Button
+                      className="w-full"
+                      variant={plan.highlighted ? "default" : "outline"}
+                      disabled={isCurrentPlan || checkoutMutation.isPending}
+                      onClick={() => {
+                        setCheckoutPending(key);
+                        checkoutMutation.mutate({ plan: plan.id, interval });
+                      }}
+                    >
+                      {checkoutPending === key && checkoutMutation.isPending
+                        ? "Redirecionando..."
+                        : isCurrentPlan
+                          ? "Plano atual"
+                          : "Assinar"}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* Billing history */}

@@ -16,6 +16,7 @@ export interface PlanInfo {
   interval: PlanInterval | null;
   status: SubscriptionStatus | null;
   trialEndsAt: Date | null;
+  currentPeriodStartsAt: Date | null;
   currentPeriodEndsAt: Date | null;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;

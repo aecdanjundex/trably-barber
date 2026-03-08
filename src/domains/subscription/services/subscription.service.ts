@@ -24,6 +24,12 @@ function getStripe(): Stripe {
   return new Stripe(key, { apiVersion: "2026-02-25.clover" });
 }
 
+function unixToDate(value: unknown): Date | null {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!isFinite(n) || n <= 0) return null;
+  return new Date(n * 1000);
+}
+
 /**
  * Reads plan/interval from the subscription's price.
  * Priority: price metadata → price nickname → price amount (mapped via PLAN_PRICES).
@@ -40,19 +46,26 @@ async function getPlanFromSubscription(
   // 1. Explicit metadata
   const metaPlan = price.metadata.plan as Plan | undefined;
   const metaInterval = price.metadata.interval as PlanInterval | undefined;
-  if (metaPlan && metaInterval) return { plan: metaPlan, interval: metaInterval };
+  if (metaPlan && metaInterval)
+    return { plan: metaPlan, interval: metaInterval };
 
   // 2. Interval from Stripe recurring
   const stripeInterval = price.recurring?.interval;
   const interval: PlanInterval | null =
-    stripeInterval === "month" ? "monthly"
-    : stripeInterval === "year" ? "annual"
-    : null;
+    stripeInterval === "month"
+      ? "monthly"
+      : stripeInterval === "year"
+        ? "annual"
+        : null;
 
   // 3. Plan from nickname
   const nickname = (price.nickname ?? "").toLowerCase();
   let plan: Plan | null = null;
-  if (nickname.includes("basic") || nickname.includes("básico") || nickname.includes("basico")) {
+  if (
+    nickname.includes("basic") ||
+    nickname.includes("básico") ||
+    nickname.includes("basico")
+  ) {
     plan = "basic";
   } else if (nickname.includes("premium")) {
     plan = "premium";
@@ -61,9 +74,15 @@ async function getPlanFromSubscription(
   // 4. Plan from unit_amount mapped to PLAN_PRICES
   if (!plan && price.unit_amount !== null) {
     const amount = price.unit_amount;
-    if (amount === PLAN_PRICES.basic.monthly || amount === PLAN_PRICES.basic.annual) {
+    if (
+      amount === PLAN_PRICES.basic.monthly ||
+      amount === PLAN_PRICES.basic.annual
+    ) {
       plan = "basic";
-    } else if (amount === PLAN_PRICES.premium.monthly || amount === PLAN_PRICES.premium.annual) {
+    } else if (
+      amount === PLAN_PRICES.premium.monthly ||
+      amount === PLAN_PRICES.premium.annual
+    ) {
       plan = "premium";
     }
   }
@@ -91,6 +110,55 @@ export class SubscriptionService implements ISubscriptionService {
       subscriptionStatus: "trialing",
       trialEndsAt,
     });
+  }
+
+  async createCheckoutSession(
+    orgId: string,
+    plan: Plan,
+    interval: PlanInterval,
+    successUrl: string,
+    cancelUrl: string,
+  ): Promise<string> {
+    const stripe = getStripe();
+
+    const priceIdMap: Record<Plan, Record<PlanInterval, string | undefined>> = {
+      free: { monthly: undefined, annual: undefined },
+      trial: { monthly: undefined, annual: undefined },
+      basic: {
+        monthly: env.STRIPE_PRICE_BASIC_MONTHLY,
+        annual: env.STRIPE_PRICE_BASIC_ANNUAL,
+      },
+      premium: {
+        monthly: env.STRIPE_PRICE_PREMIUM_MONTHLY,
+        annual: env.STRIPE_PRICE_PREMIUM_ANNUAL,
+      },
+    };
+
+    const priceId = priceIdMap[plan]?.[interval];
+    if (!priceId) {
+      throw new Error(
+        `Price ID não configurado para ${plan}/${interval}. Configure STRIPE_PRICE_${plan.toUpperCase()}_${interval.toUpperCase()} no .env`,
+      );
+    }
+
+    const org = await this.repo.getOrgById(orgId);
+
+    const sessionParams: Stripe.Checkout.SessionCreateParams = {
+      mode: "subscription",
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      client_reference_id: orgId,
+      metadata: { orgId },
+      subscription_data: { metadata: { orgId } },
+    };
+
+    if (org?.stripeCustomerId) {
+      sessionParams.customer = org.stripeCustomerId;
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
+    return session.url!;
   }
 
   async createPortalSession(orgId: string, returnUrl: string): Promise<string> {
@@ -123,14 +191,14 @@ export class SubscriptionService implements ISubscriptionService {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         // Pricing Table sets client_reference_id; manual checkout uses metadata.orgId
-        const orgId =
-          session.client_reference_id ?? session.metadata?.orgId;
+        const orgId = session.client_reference_id ?? session.metadata?.orgId;
         if (!orgId || !session.subscription) break;
 
         const sub = await stripe.subscriptions.retrieve(
           session.subscription as string,
         );
         const planData = await getPlanFromSubscription(stripe, sub);
+        const subRaw = sub as unknown as Record<string, unknown>;
 
         await this.repo.updateSubscription(orgId, {
           ...(planData ?? {}),
@@ -138,6 +206,8 @@ export class SubscriptionService implements ISubscriptionService {
           stripeSubscriptionId: session.subscription as string,
           subscriptionStatus: "active",
           trialEndsAt: null,
+          currentPeriodStartsAt: unixToDate(subRaw.current_period_start),
+          currentPeriodEndsAt: unixToDate(subRaw.current_period_end),
         });
 
         // invoice.created fires before this event (customer ID not yet saved),
@@ -149,9 +219,11 @@ export class SubscriptionService implements ISubscriptionService {
           const invRaw = inv as unknown as Record<string, unknown>;
           const invStatus = invRaw.status as string;
           const mapped =
-            invStatus === "paid" ? "paid"
-            : invStatus === "open" ? "open"
-            : "failed";
+            invStatus === "paid"
+              ? "paid"
+              : invStatus === "open"
+                ? "open"
+                : "failed";
           await this.recordInvoice(stripe, inv, orgId, mapped);
         }
         break;
@@ -178,15 +250,15 @@ export class SubscriptionService implements ISubscriptionService {
             }
           : await getPlanFromSubscription(stripe, sub);
 
+        const subRaw = sub as unknown as Record<string, unknown>;
         await this.repo.updateSubscription(orgId, {
           ...(planData ?? {}),
           stripeSubscriptionId: sub.id,
           subscriptionStatus: sub.status as string,
-          // current_period_end was removed from the Subscription type in newer Stripe API versions
-          // but is still returned at runtime
-          currentPeriodEndsAt: new Date(
-            ((sub as unknown as Record<string, number>).current_period_end) * 1000,
-          ),
+          // current_period_start/end were removed from the Subscription type in newer Stripe API
+          // versions but are still returned at runtime
+          currentPeriodStartsAt: unixToDate(subRaw.current_period_start),
+          currentPeriodEndsAt: unixToDate(subRaw.current_period_end),
         });
         break;
       }
@@ -207,6 +279,7 @@ export class SubscriptionService implements ISubscriptionService {
           planInterval: null,
           stripeSubscriptionId: null,
           subscriptionStatus: "canceled",
+          currentPeriodStartsAt: null,
           currentPeriodEndsAt: null,
         });
         break;
@@ -282,8 +355,8 @@ export class SubscriptionService implements ISubscriptionService {
 
     const amountInCents =
       status === "paid"
-        ? (raw.amount_paid as number) ?? 0
-        : (raw.amount_due as number) ?? 0;
+        ? ((raw.amount_paid as number) ?? 0)
+        : ((raw.amount_due as number) ?? 0);
 
     await this.repo.upsertInvoice({
       id: crypto.randomUUID(),

@@ -11,6 +11,10 @@ const serverEnvSchema = z.object({
   // Stripe (optional at startup — validated at call time)
   STRIPE_SECRET_KEY: z.string().min(1).optional(),
   STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
+  STRIPE_PRICE_BASIC_MONTHLY: z.string().min(1).optional(),
+  STRIPE_PRICE_BASIC_ANNUAL: z.string().min(1).optional(),
+  STRIPE_PRICE_PREMIUM_MONTHLY: z.string().min(1).optional(),
+  STRIPE_PRICE_PREMIUM_ANNUAL: z.string().min(1).optional(),
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
 });
 
