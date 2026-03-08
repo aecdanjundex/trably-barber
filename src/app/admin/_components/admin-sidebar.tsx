@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   LayoutDashboard,
   Scissors,
@@ -14,6 +15,7 @@ import {
   Copy,
   Clock,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Sidebar,
   SidebarContent,
@@ -30,9 +32,17 @@ import {
 } from "@/components/ui/sidebar";
 import { useSession, signOut, authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { clientEnv } from "@/lib/env/client";
 import { useState } from "react";
+
+const ROLE_LABELS: Record<string, string> = {
+  owner: "Dono",
+  admin: "Admin",
+  barber: "Barbeiro",
+  member: "Membro",
+};
 
 const navItems = [
   { title: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -47,6 +57,15 @@ export function AdminSidebar() {
   const router = useRouter();
   const { data: session } = useSession();
 
+  const { data: activeMember } = useQuery({
+    queryKey: ["active-member"],
+    queryFn: async () => {
+      const result = await authClient.organization.getActiveMember();
+      return result.data;
+    },
+    enabled: !!session?.user,
+  });
+
   return (
     <Sidebar>
       <SidebarHeader className="border-b px-4 py-3">
@@ -55,9 +74,16 @@ export function AdminSidebar() {
           <span className="text-lg font-bold">Trably Barber</span>
         </div>
         {session?.user && (
-          <p className="mt-1 truncate text-sm text-muted-foreground">
-            {session.user.name}
-          </p>
+          <div className="mt-1 flex items-center gap-2">
+            <p className="truncate text-sm text-muted-foreground">
+              {session.user.name}
+            </p>
+            {activeMember?.role && (
+              <Badge variant="secondary" className="shrink-0 text-xs">
+                {ROLE_LABELS[activeMember.role] ?? activeMember.role}
+              </Badge>
+            )}
+          </div>
         )}
       </SidebarHeader>
 
@@ -65,10 +91,10 @@ export function AdminSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>Menu</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-1">
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton onClick={() => router.push(item.href)}>
+                  <SidebarMenuButton render={<Link href={item.href} />}>
                     <item.icon className="h-4 w-4" />
                     <span>{item.title}</span>
                   </SidebarMenuButton>
@@ -80,17 +106,20 @@ export function AdminSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t p-4">
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-2"
-          onClick={async () => {
-            await signOut();
-            router.push("/admin/login");
-          }}
-        >
-          <LogOut className="h-4 w-4" />
-          Sair
-        </Button>
+        <div className="flex items-center justify-between">
+          <Button
+            variant="ghost"
+            className="justify-start gap-2"
+            onClick={async () => {
+              await signOut();
+              router.push("/admin/login");
+            }}
+          >
+            <LogOut className="h-4 w-4" />
+            Sair
+          </Button>
+          <ThemeToggle />
+        </div>
       </SidebarFooter>
     </Sidebar>
   );

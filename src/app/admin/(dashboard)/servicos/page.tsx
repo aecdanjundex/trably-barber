@@ -89,6 +89,12 @@ export default function ServicosPage() {
     }),
   );
 
+  const toggleActiveMutation = useMutation(
+    trpc.admin.updateService.mutationOptions({
+      onSuccess: () => invalidate(),
+    }),
+  );
+
   const deleteMutation = useMutation(
     trpc.admin.deleteService.mutationOptions({
       onSuccess: () => {
@@ -175,7 +181,7 @@ export default function ServicosPage() {
                 <TableHead>Nome</TableHead>
                 <TableHead>Duração</TableHead>
                 <TableHead>Preço</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Disponível p/ agendamento</TableHead>
                 <TableHead className="w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -195,9 +201,18 @@ export default function ServicosPage() {
                   <TableCell>{svc.durationMinutes} min</TableCell>
                   <TableCell>{formatPrice(svc.priceInCents)}</TableCell>
                   <TableCell>
-                    <Badge variant={svc.active ? "default" : "secondary"}>
-                      {svc.active ? "Ativo" : "Inativo"}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={svc.active}
+                        onCheckedChange={(val) =>
+                          toggleActiveMutation.mutate({ id: svc.id, active: val })
+                        }
+                        disabled={toggleActiveMutation.isPending}
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        {svc.active ? "Visível" : "Oculto"}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">

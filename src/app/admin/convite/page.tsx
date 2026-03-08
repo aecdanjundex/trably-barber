@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -25,7 +26,7 @@ type SignupFormData = {
   confirmPassword: string;
 };
 
-export default function ConvitePage() {
+function ConviteContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const invitationId = searchParams.get("id");
@@ -267,4 +268,18 @@ export default function ConvitePage() {
 
   // Fallback — should not reach here normally
   return null;
+}
+
+export default function ConvitePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <ConviteContent />
+    </Suspense>
+  );
 }

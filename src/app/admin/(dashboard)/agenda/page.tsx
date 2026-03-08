@@ -96,7 +96,11 @@ export default function AgendaPage() {
             onValueChange={setSelectedBarberId}
           >
             <SelectTrigger className="w-64">
-              <SelectValue placeholder="Selecione um profissional" />
+              <SelectValue placeholder="Selecione um profissional">
+                {selectedBarberId
+                  ? (barbers.find((b) => b.userId === selectedBarberId)?.user.name ?? selectedBarberId)
+                  : undefined}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {barbers.map((b) => (
@@ -191,7 +195,7 @@ function ScheduleConfigSection({ barberId }: { barberId: string }) {
           const config = configMap.get(dayOfWeek);
           return (
             <DayConfigRow
-              key={dayOfWeek}
+              key={`${barberId}-${dayOfWeek}`}
               dayName={dayName}
               dayOfWeek={dayOfWeek}
               barberId={barberId}

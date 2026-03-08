@@ -78,12 +78,12 @@ export function AuthScreen({ org, onOtpSent }: Props) {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 px-6">
-      <Card className="w-full max-w-sm border-zinc-800 bg-zinc-900/50">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
+      <Card className="w-full max-w-sm border-border bg-card/50">
         <CardHeader className="flex flex-col items-center text-center">
           <Avatar className="mb-2 size-20 ring-2 ring-amber-400/30">
             {org.logo && <AvatarImage src={org.logo} alt={org.name} />}
-            <AvatarFallback className="bg-zinc-800 text-2xl font-bold text-amber-400">
+            <AvatarFallback className="bg-muted text-2xl font-bold text-amber-400">
               {getInitials(org.name)}
             </AvatarFallback>
           </Avatar>
@@ -94,10 +94,8 @@ export function AuthScreen({ org, onOtpSent }: Props) {
             <Scissors className="size-3" />
             Barbearia
           </Badge>
-          <CardTitle className="mt-2 text-2xl text-white">{org.name}</CardTitle>
-          <CardDescription className="text-zinc-500">
-            Entre para agendar seu horário
-          </CardDescription>
+          <CardTitle className="mt-2 text-2xl">{org.name}</CardTitle>
+          <CardDescription>Entre para agendar seu horário</CardDescription>
         </CardHeader>
 
         <CardContent>
@@ -105,12 +103,12 @@ export function AuthScreen({ org, onOtpSent }: Props) {
             <div className="space-y-2">
               <Label
                 htmlFor="phone"
-                className="text-xs uppercase tracking-widest text-zinc-500"
+                className="text-xs uppercase tracking-widest text-muted-foreground"
               >
                 Telefone
               </Label>
-              <div className="flex overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900 transition-all focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
-                <span className="flex items-center border-r border-zinc-800 px-3 text-sm font-medium text-zinc-500">
+              <div className="flex overflow-hidden rounded-lg border border-border bg-background transition-all focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
+                <span className="flex items-center border-r border-border px-3 text-sm font-medium text-muted-foreground">
                   +55
                 </span>
                 <Input
@@ -123,7 +121,7 @@ export function AuthScreen({ org, onOtpSent }: Props) {
                   onChange={(e) =>
                     setPhone(formatPhone(e.target.value.replace(/\D/g, "")))
                   }
-                  className="h-11 rounded-none border-0 bg-transparent text-white ring-0 focus-visible:ring-0 focus-visible:border-transparent"
+                  className="h-11 rounded-none border-0 bg-transparent ring-0 focus-visible:ring-0 focus-visible:border-transparent"
                 />
               </div>
               {error && <p className="text-xs text-destructive">{error}</p>}

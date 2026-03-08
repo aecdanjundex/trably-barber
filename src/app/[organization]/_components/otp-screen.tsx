@@ -68,24 +68,22 @@ export function OtpScreen({ org, phone, onBack, onSuccess }: Props) {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-950 px-6 pt-16">
+    <div className="flex min-h-screen flex-col bg-background px-6 pt-16">
       <div className="mx-auto w-full max-w-sm">
         <Button
           variant="ghost"
           size="sm"
           onClick={onBack}
-          className="mb-10 text-zinc-500 hover:text-zinc-200"
+          className="mb-10 text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" />
           Voltar
         </Button>
 
-        <Card className="border-zinc-800 bg-zinc-900/50">
+        <Card className="border-border bg-card/50">
           <CardHeader>
-            <CardTitle className="text-xl text-white">
-              Código enviado!
-            </CardTitle>
-            <CardDescription className="text-zinc-500">
+            <CardTitle className="text-xl">Código enviado!</CardTitle>
+            <CardDescription>
               Enviamos um SMS para{" "}
               <span className="font-medium text-amber-400">{displayPhone}</span>
             </CardDescription>
@@ -94,7 +92,7 @@ export function OtpScreen({ org, phone, onBack, onSuccess }: Props) {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-3">
-                <Label className="text-xs uppercase tracking-widest text-zinc-500">
+                <Label className="text-xs uppercase tracking-widest text-muted-foreground">
                   Código de verificação
                 </Label>
                 <InputOTP
@@ -106,30 +104,30 @@ export function OtpScreen({ org, phone, onBack, onSuccess }: Props) {
                   <InputOTPGroup>
                     <InputOTPSlot
                       index={0}
-                      className="size-12 border-zinc-700 bg-zinc-800 text-lg font-bold text-white"
+                      className="size-12 border-border bg-muted text-lg font-bold"
                     />
                     <InputOTPSlot
                       index={1}
-                      className="size-12 border-zinc-700 bg-zinc-800 text-lg font-bold text-white"
+                      className="size-12 border-border bg-muted text-lg font-bold"
                     />
                     <InputOTPSlot
                       index={2}
-                      className="size-12 border-zinc-700 bg-zinc-800 text-lg font-bold text-white"
+                      className="size-12 border-border bg-muted text-lg font-bold"
                     />
                   </InputOTPGroup>
                   <InputOTPSeparator />
                   <InputOTPGroup>
                     <InputOTPSlot
                       index={3}
-                      className="size-12 border-zinc-700 bg-zinc-800 text-lg font-bold text-white"
+                      className="size-12 border-border bg-muted text-lg font-bold"
                     />
                     <InputOTPSlot
                       index={4}
-                      className="size-12 border-zinc-700 bg-zinc-800 text-lg font-bold text-white"
+                      className="size-12 border-border bg-muted text-lg font-bold"
                     />
                     <InputOTPSlot
                       index={5}
-                      className="size-12 border-zinc-700 bg-zinc-800 text-lg font-bold text-white"
+                      className="size-12 border-border bg-muted text-lg font-bold"
                     />
                   </InputOTPGroup>
                 </InputOTP>
@@ -150,7 +148,7 @@ export function OtpScreen({ org, phone, onBack, onSuccess }: Props) {
               </Button>
             </form>
 
-            <p className="mt-4 text-center text-xs text-zinc-700">
+            <p className="mt-4 text-center text-xs text-muted-foreground/50">
               O código expira em 10 minutos.
             </p>
           </CardContent>
