@@ -1,316 +1,85 @@
-import "server-only";
-import { inject, injectable } from "inversify";
+import "reflect-metadata";
+import { injectable, inject } from "inversify";
+import { TRPCError } from "@trpc/server";
 import { TYPES } from "@/lib/di/types";
 import type { IServiceOrderRepository } from "../interfaces/service-order.repository.interface";
 import type { IServiceOrderService } from "../interfaces/service-order.service.interface";
 import type {
-  CreateProductInput,
-  UpdateProductInput,
-  CreatePaymentMethodInput,
-  UpdatePaymentMethodInput,
-  UpsertCommissionConfigInput,
-  CreateServiceOrderInput,
-  UpdateServiceOrderInput,
-  AddServiceOrderItemInput,
-  UpdateServiceOrderItemInput,
-  AddPaymentInput,
-  CreateQuickItemInput,
-  UpdateQuickItemInput,
-  GenerateCommissionPaymentInput,
-} from "../schemas/service-order.schema";
+  ServiceOrder,
+  ServiceOrderItem,
+  ServiceOrderPayment,
+  ServiceOrderDetail,
+  CreateOrderInput,
+  UpdateOrderInput,
+  AddOrderItemInput,
+  AddOrderPaymentInput,
+  ListOrdersInput,
+} from "../types";
 
 @injectable()
-class ServiceOrderService implements IServiceOrderService {
+export class ServiceOrderService implements IServiceOrderService {
   constructor(
     @inject(TYPES.ServiceOrderRepository)
-    private readonly repository: IServiceOrderRepository,
+    private repo: IServiceOrderRepository,
   ) {}
 
-  // ─── Products ──────────────────────────────────────────────────────────────
-
-  async listProducts(orgId: string) {
-    return this.repository.listProducts(orgId);
+  list(
+    input: ListOrdersInput,
+  ): Promise<{ data: ServiceOrder[]; total: number }> {
+    return this.repo.list(input);
   }
 
-  async createProduct(orgId: string, input: CreateProductInput) {
-    return this.repository.createProduct(orgId, input);
-  }
-
-  async updateProduct(orgId: string, input: UpdateProductInput) {
-    return this.repository.updateProduct(orgId, input);
-  }
-
-  async deleteProduct(orgId: string, id: string) {
-    return this.repository.deleteProduct(orgId, id);
-  }
-
-  // ─── Payment Methods ───────────────────────────────────────────────────────
-
-  async listPaymentMethods(orgId: string) {
-    return this.repository.listPaymentMethods(orgId);
-  }
-
-  async createPaymentMethod(orgId: string, input: CreatePaymentMethodInput) {
-    return this.repository.createPaymentMethod(orgId, input);
-  }
-
-  async updatePaymentMethod(orgId: string, input: UpdatePaymentMethodInput) {
-    return this.repository.updatePaymentMethod(orgId, input);
-  }
-
-  async deletePaymentMethod(orgId: string, id: string) {
-    return this.repository.deletePaymentMethod(orgId, id);
-  }
-
-  // ─── Commission Config ─────────────────────────────────────────────────────
-
-  async listCommissionConfigs(orgId: string) {
-    return this.repository.listCommissionConfigs(orgId);
-  }
-
-  async upsertCommissionConfig(
-    orgId: string,
-    input: UpsertCommissionConfigInput,
-  ) {
-    return this.repository.upsertCommissionConfig(orgId, input);
-  }
-
-  async deleteCommissionConfig(orgId: string, id: string) {
-    return this.repository.deleteCommissionConfig(orgId, id);
-  }
-
-  // ─── Service Orders ────────────────────────────────────────────────────────
-
-  async listServiceOrders(
-    orgId: string,
-    filters?: { status?: string; customerId?: string; from?: Date; to?: Date },
-  ) {
-    return this.repository.listServiceOrders(orgId, filters);
-  }
-
-  async getServiceOrder(orgId: string, id: string) {
-    return this.repository.getServiceOrder(orgId, id);
-  }
-
-  async createServiceOrder(orgId: string, input: CreateServiceOrderInput) {
-    return this.repository.createServiceOrder(orgId, input);
-  }
-
-  async updateServiceOrder(orgId: string, input: UpdateServiceOrderInput) {
-    return this.repository.updateServiceOrder(orgId, input);
-  }
-
-  // ─── Service Order Items ───────────────────────────────────────────────────
-
-  async addServiceOrderItem(orgId: string, input: AddServiceOrderItemInput) {
-    // Resolve name and price from the referenced service/product
-    let name: string;
-    let unitPriceInCents: number;
-
-    if (input.itemType === "service") {
-      const svc = await this.repository.getServiceReference(
-        orgId,
-        input.referenceId,
-      );
-      if (!svc) throw new Error("Servi\u00e7o n\u00e3o encontrado");
-      name = svc.name;
-      unitPriceInCents = svc.priceInCents;
-    } else {
-      const prod = await this.repository.getProduct(orgId, input.referenceId);
-      if (!prod) throw new Error("Produto n\u00e3o encontrado");
-      name = prod.name;
-      unitPriceInCents = prod.priceInCents;
-    }
-
-    // Resolve commission configs for each professional
-    let professionals:
-      | {
-          professionalId: string;
-          commissionType: string;
-          fixedValueInCents?: number | null;
-          percentageValue?: number | null;
-        }[]
-      | undefined;
-
-    if (input.professionalIds?.length) {
-      const configs = await this.repository.getCommissionConfigsForReference(
-        orgId,
-        input.itemType,
-        input.referenceId,
-        input.professionalIds,
-      );
-
-      professionals = input.professionalIds.map((profId) => {
-        const config = configs.find((c) => c.professionalId === profId);
-        return {
-          professionalId: profId,
-          commissionType: config?.commissionType ?? "fixed",
-          fixedValueInCents: config?.fixedValueInCents ?? null,
-          percentageValue: config?.percentageValue ?? null,
-        };
+  async getById(
+    id: string,
+    organizationId: string,
+  ): Promise<ServiceOrderDetail> {
+    const result = await this.repo.findById(id, organizationId);
+    if (!result) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Ordem de serviço não encontrada",
       });
     }
-
-    return this.repository.addServiceOrderItem({
-      serviceOrderId: input.serviceOrderId,
-      itemType: input.itemType,
-      referenceId: input.referenceId,
-      name,
-      quantity: input.quantity,
-      unitPriceInCents,
-      notes: input.notes,
-      professionals,
-    });
+    return result;
   }
 
-  async updateServiceOrderItem(input: UpdateServiceOrderItemInput) {
-    return this.repository.updateServiceOrderItem(input);
+  create(input: CreateOrderInput): Promise<ServiceOrder> {
+    return this.repo.create(input);
   }
 
-  async removeServiceOrderItem(id: string) {
-    return this.repository.removeServiceOrderItem(id);
-  }
-
-  // ─── Payments ──────────────────────────────────────────────────────────────
-
-  async addPayment(input: AddPaymentInput) {
-    return this.repository.addPayment(input);
-  }
-
-  async removePayment(id: string) {
-    return this.repository.removePayment(id);
-  }
-
-  async listPaymentsByDateRange(orgId: string, from: Date, to: Date) {
-    return this.repository.listPaymentsByDateRange(orgId, from, to);
-  }
-
-  // ─── Quick Items ───────────────────────────────────────────────────────────
-
-  async listQuickItems(orgId: string) {
-    return this.repository.listQuickItems(orgId);
-  }
-
-  async createQuickItem(orgId: string, input: CreateQuickItemInput) {
-    return this.repository.createQuickItem(orgId, input);
-  }
-
-  async updateQuickItem(orgId: string, input: UpdateQuickItemInput) {
-    return this.repository.updateQuickItem(orgId, input);
-  }
-
-  async deleteQuickItem(orgId: string, id: string) {
-    return this.repository.deleteQuickItem(orgId, id);
-  }
-
-  // ─── Reports ─────────────────────────────────────────────────────────────
-
-  async getReportTotalInvoiced(orgId: string, from: Date, to: Date) {
-    return this.repository.getReportTotalInvoiced(orgId, from, to);
-  }
-
-  async getReportAverageTicket(orgId: string, from: Date, to: Date) {
-    return this.repository.getReportAverageTicket(orgId, from, to);
-  }
-
-  async getReportByPaymentMethod(orgId: string, from: Date, to: Date) {
-    return this.repository.getReportByPaymentMethod(orgId, from, to);
-  }
-
-  async getReportByProfessional(orgId: string, from: Date, to: Date) {
-    return this.repository.getReportByProfessional(orgId, from, to);
-  }
-
-  async getReportByProduct(orgId: string, from: Date, to: Date) {
-    return this.repository.getReportByProduct(orgId, from, to);
-  }
-
-  async getReportByService(orgId: string, from: Date, to: Date) {
-    return this.repository.getReportByService(orgId, from, to);
-  }
-
-  // ─── Commission Payments ─────────────────────────────────────────────────
-
-  async listCommissionPayments(
-    orgId: string,
-    filters?: { professionalId?: string; status?: string },
-  ) {
-    return this.repository.listCommissionPayments(orgId, filters);
-  }
-
-  async getCommissionPayment(orgId: string, id: string) {
-    return this.repository.getCommissionPayment(orgId, id);
-  }
-
-  async generateCommissionPayment(
-    orgId: string,
-    input: GenerateCommissionPaymentInput,
-  ) {
-    // Fetch all items the professional worked on in completed orders within the period
-    const items = await this.repository.getItemsByProfessionalAndPeriod(
-      orgId,
-      input.professionalId,
-      input.periodFrom,
-      input.periodTo,
-    );
-
-    if (!items.length) {
-      throw new Error(
-        "Nenhum item encontrado para o profissional nesse período",
-      );
-    }
-
-    // Calculate commission for each item
-    const commissionItems = items.map((item) => {
-      let commissionAmountInCents: number;
-      if (item.commissionType === "fixed") {
-        commissionAmountInCents = (item.fixedValueInCents ?? 0) * item.quantity;
-      } else {
-        // percentage: basis points (1000 = 10.00%)
-        commissionAmountInCents = Math.round(
-          (item.unitPriceInCents *
-            item.quantity *
-            (item.percentageValue ?? 0)) /
-            10000,
-        );
-      }
-
-      return {
-        serviceOrderItemId: item.serviceOrderItemId,
-        referenceType: item.itemType,
-        referenceId: item.referenceId,
-        name: item.name,
-        quantity: item.quantity,
-        unitPriceInCents: item.unitPriceInCents,
-        commissionType: item.commissionType,
-        fixedValueInCents: item.fixedValueInCents,
-        percentageValue: item.percentageValue,
-        commissionAmountInCents,
-      };
-    });
-
-    const totalCommissionInCents = commissionItems.reduce(
-      (sum, i) => sum + i.commissionAmountInCents,
-      0,
-    );
-
-    return this.repository.createCommissionPayment({
-      organizationId: orgId,
-      professionalId: input.professionalId,
-      periodFrom: input.periodFrom,
-      periodTo: input.periodTo,
-      totalCommissionInCents,
-      items: commissionItems,
-    });
-  }
-
-  async updateCommissionPaymentStatus(
-    orgId: string,
+  update(
     id: string,
-    status: string,
-  ) {
-    return this.repository.updateCommissionPaymentStatus(orgId, id, status);
+    organizationId: string,
+    input: UpdateOrderInput,
+  ): Promise<ServiceOrder> {
+    return this.repo.update(id, organizationId, input);
+  }
+
+  delete(id: string, organizationId: string): Promise<void> {
+    return this.repo.delete(id, organizationId);
+  }
+
+  addItem(input: AddOrderItemInput): Promise<ServiceOrderItem> {
+    return this.repo.addItem(input);
+  }
+
+  removeItem(
+    itemId: string,
+    serviceOrderId: string,
+    organizationId: string,
+  ): Promise<void> {
+    return this.repo.removeItem(itemId, serviceOrderId, organizationId);
+  }
+
+  addPayment(input: AddOrderPaymentInput): Promise<ServiceOrderPayment> {
+    return this.repo.addPayment(input);
+  }
+
+  removePayment(
+    paymentId: string,
+    serviceOrderId: string,
+    organizationId: string,
+  ): Promise<void> {
+    return this.repo.removePayment(paymentId, serviceOrderId, organizationId);
   }
 }
-
-export { ServiceOrderService };

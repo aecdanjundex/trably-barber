@@ -1,135 +1,108 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { Plus, Search, UserCircle } from "lucide-react";
 import { useTRPC } from "@/trpc/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, UserCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Skeleton } from "@/components/ui/skeleton";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useForm } from "react-hook-form";
+import { z } from "zod/v4";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import Link from "next/link";
+import { useDebounce } from "@/hooks/use-debounce";
 
-type CustomerFormData = {
-  name: string;
-  phone: string;
-  email: string;
-  notes: string;
+const STATUS_LABELS = {
+  lead: { label: "Lead", variant: "outline" as const },
+  active: { label: "Ativo", variant: "default" as const },
+  inactive: { label: "Inativo", variant: "secondary" as const },
 };
 
-function formatDate(date: Date) {
-  return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(date));
-}
+const SOURCE_LABELS: Record<string, string> = {
+  referral: "Indicação",
+  social: "Redes Sociais",
+  walk_in: "Entrada Direta",
+  website: "Website",
+  other: "Outro",
+};
+
+const createClientSchema = z.object({
+  name: z.string().min(1, "Nome é obrigatório"),
+  email: z.string().email("Email inválido").optional().or(z.literal("")),
+  phone: z.string().optional(),
+  status: z.enum(["lead", "active", "inactive"]).default("active"),
+  source: z
+    .enum(["referral", "social", "walk_in", "website", "other"])
+    .optional(),
+  notes: z.string().optional(),
+});
+
+type CreateClientFormValues = z.infer<typeof createClientSchema>;
 
 export default function ClientesPage() {
   const trpc = useTRPC();
-  const queryClient = useQueryClient();
+  const qc = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [createOpen, setCreateOpen] = useState(false);
+  const debouncedSearch = useDebounce(search, 300);
 
-  const { data: customers, isLoading } = useQuery(
-    trpc.admin.listCustomers.queryOptions(),
+  const { data, isLoading } = useQuery(
+    trpc.client.list.queryOptions({
+      search: debouncedSearch || undefined,
+      status:
+        statusFilter !== "all"
+          ? (statusFilter as "lead" | "active" | "inactive")
+          : undefined,
+      pageSize: 50,
+    }),
   );
-
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-
-  const form = useForm<CustomerFormData>({
-    defaultValues: { name: "", phone: "", email: "", notes: "" },
-  });
-
-  const invalidate = () =>
-    queryClient.invalidateQueries({
-      queryKey: trpc.admin.listCustomers.queryKey(),
-    });
 
   const createMutation = useMutation(
-    trpc.admin.createCustomer.mutationOptions({
+    trpc.client.create.mutationOptions({
       onSuccess: () => {
-        invalidate();
-        closeDialog();
+        qc.invalidateQueries({ queryKey: trpc.client.list.queryKey() });
+        setCreateOpen(false);
+        form.reset();
       },
     }),
   );
 
-  const updateMutation = useMutation(
-    trpc.admin.updateCustomer.mutationOptions({
-      onSuccess: () => {
-        invalidate();
-        closeDialog();
-      },
-    }),
-  );
+  const form = useForm<CreateClientFormValues>({
+    resolver: zodResolver(createClientSchema),
+    defaultValues: { name: "", email: "", phone: "", status: "active" },
+  });
 
-  const toggleActiveMutation = useMutation(
-    trpc.admin.updateCustomer.mutationOptions({
-      onSuccess: () => invalidate(),
-    }),
-  );
-
-  function openCreate() {
-    setEditingId(null);
-    form.reset({ name: "", phone: "", email: "", notes: "" });
-    setDialogOpen(true);
-  }
-
-  function openEdit(c: NonNullable<typeof customers>[number]) {
-    setEditingId(c.id);
-    form.reset({
-      name: c.name,
-      phone: c.phone,
-      email: c.email ?? "",
-      notes: c.notes ?? "",
+  function onSubmit(values: CreateClientFormValues) {
+    createMutation.mutate({
+      ...values,
+      email: values.email || undefined,
     });
-    setDialogOpen(true);
   }
-
-  function closeDialog() {
-    setDialogOpen(false);
-    setEditingId(null);
-    form.reset();
-  }
-
-  function onSubmit(data: CustomerFormData) {
-    if (editingId) {
-      updateMutation.mutate({
-        id: editingId,
-        name: data.name,
-        phone: data.phone,
-        email: data.email || null,
-        notes: data.notes || null,
-      });
-    } else {
-      createMutation.mutate({
-        name: data.name,
-        phone: data.phone,
-        email: data.email || undefined,
-        notes: data.notes || undefined,
-      });
-    }
-  }
-
-  const isSaving = createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -137,142 +110,217 @@ export default function ClientesPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Clientes</h1>
           <p className="text-muted-foreground">
-            Gerencie os clientes da sua barbearia
+            {data?.total ?? 0} cliente{data?.total !== 1 ? "s" : ""} cadastrado{data?.total !== 1 ? "s" : ""}
           </p>
         </div>
-        <Button onClick={openCreate}>
+        <Button onClick={() => setCreateOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Novo Cliente
         </Button>
       </div>
 
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nome, email ou telefone…"
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os status</SelectItem>
+            <SelectItem value="lead">Lead</SelectItem>
+            <SelectItem value="active">Ativo</SelectItem>
+            <SelectItem value="inactive">Inativo</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Clients list */}
       {isLoading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-16 w-full" />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {[...Array(6)].map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-xl" />
           ))}
         </div>
-      ) : !customers?.length ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-          <UserCircle className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-          <p className="text-muted-foreground">Nenhum cliente cadastrado</p>
-          <Button variant="outline" className="mt-4" onClick={openCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            Adicionar primeiro cliente
-          </Button>
+      ) : !data?.data.length ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-16 text-center">
+          <UserCircle className="mx-auto mb-3 h-12 w-12 text-muted-foreground" />
+          <p className="font-medium">Nenhum cliente encontrado</p>
+          <p className="text-sm text-muted-foreground">
+            {search || statusFilter !== "all"
+              ? "Tente ajustar os filtros"
+              : "Cadastre o primeiro cliente clicando em Novo Cliente"}
+          </p>
         </div>
       ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Telefone</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Observações</TableHead>
-                <TableHead>Ativo</TableHead>
-                <TableHead>Desde</TableHead>
-                <TableHead className="w-16">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {customers.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell>{c.phone}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {c.email ?? "—"}
-                  </TableCell>
-                  <TableCell className="max-w-50 truncate text-muted-foreground">
-                    {c.notes ?? "—"}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={c.active}
-                        onCheckedChange={(val) =>
-                          toggleActiveMutation.mutate({ id: c.id, active: val })
-                        }
-                        disabled={toggleActiveMutation.isPending}
-                      />
-                      <span className="text-sm text-muted-foreground">
-                        {c.active ? "Ativo" : "Inativo"}
-                      </span>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {data.data.map((c) => {
+            const status = STATUS_LABELS[c.status as keyof typeof STATUS_LABELS];
+            return (
+              <Link key={c.id} href={`/admin/clientes/${c.id}`}>
+                <Card className="cursor-pointer transition-colors hover:bg-muted/40">
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                          {c.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{c.name}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {c.phone ?? c.email ?? "—"}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant={status?.variant ?? "outline"} className="shrink-0">
+                        {status?.label ?? c.status}
+                      </Badge>
                     </div>
-                  </TableCell>
-                  <TableCell>{formatDate(c.createdAt)}</TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => openEdit(c)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                    {c.tags.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-1">
+                        {c.tags.map((t) => (
+                          <span
+                            key={t.id}
+                            className="rounded-full px-2 py-0.5 text-xs font-medium text-white"
+                            style={{ backgroundColor: t.color }}
+                          >
+                            {t.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {c.source && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Origem: {SOURCE_LABELS[c.source] ?? c.source}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
         </div>
       )}
 
-      {/* Create / Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => !open && closeDialog()}>
-        <DialogContent>
+      {/* Create client dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              {editingId ? "Editar Cliente" : "Novo Cliente"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingId
-                ? "Atualize as informações do cliente"
-                : "Preencha os dados do novo cliente"}
-            </DialogDescription>
+            <DialogTitle>Novo Cliente</DialogTitle>
           </DialogHeader>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="cust-name">Nome</Label>
-              <Input
-                id="cust-name"
-                placeholder="Nome completo"
-                {...form.register("name", { required: true })}
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Nome do cliente" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="cust-phone">Telefone</Label>
-              <Input
-                id="cust-phone"
-                placeholder="(11) 99999-9999"
-                {...form.register("phone", { required: true })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="cust-email">Email (opcional)</Label>
-              <Input
-                id="cust-email"
-                type="email"
-                placeholder="cliente@email.com"
-                {...form.register("email")}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="cust-notes">Observações (opcional)</Label>
-              <Textarea
-                id="cust-notes"
-                placeholder="Preferências, alergias, etc."
-                {...form.register("notes")}
-              />
-            </div>
-            <DialogFooter>
-              <Button variant="outline" type="button" onClick={closeDialog}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={isSaving}>
-                {isSaving ? "Salvando..." : "Salvar"}
-              </Button>
-            </DialogFooter>
-          </form>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input placeholder="email@exemplo.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Telefone</FormLabel>
+                      <FormControl>
+                        <Input placeholder="(11) 99999-9999" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="status"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Status</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="lead">Lead</SelectItem>
+                          <SelectItem value="active">Ativo</SelectItem>
+                          <SelectItem value="inactive">Inativo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="source"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Origem</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecionar" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="referral">Indicação</SelectItem>
+                          <SelectItem value="social">Redes Sociais</SelectItem>
+                          <SelectItem value="walk_in">Entrada Direta</SelectItem>
+                          <SelectItem value="website">Website</SelectItem>
+                          <SelectItem value="other">Outro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCreateOpen(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={createMutation.isPending}>
+                  {createMutation.isPending ? "Salvando…" : "Salvar"}
+                </Button>
+              </div>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </div>

@@ -1,77 +1,40 @@
 "use client";
 
-import { useState } from "react";
-import { CalendarDays, Scissors, Users, Clock, DollarSign } from "lucide-react";
+import { useMemo } from "react";
+import {
+  Users,
+  ClipboardList,
+  DollarSign,
+  TrendingUp,
+  ArrowRight,
+} from "lucide-react";
 import { useTRPC } from "@/trpc/utils";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { authClient } from "@/lib/auth-client";
-import { Check, X } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import Link from "next/link";
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-const ORG_ADMIN_ROLES = ["owner", "admin"];
-
-const STATUS_MAP: Record<
-  string,
-  {
-    label: string;
-    variant: "default" | "secondary" | "destructive" | "outline";
-  }
-> = {
-  scheduled: { label: "Agendado", variant: "default" },
-  pending_confirmation: { label: "Aguardando confirmação", variant: "outline" },
-  waiting: { label: "Aguardando atendimento", variant: "outline" },
-  in_service: { label: "Em atendimento", variant: "secondary" },
-  completed: { label: "Concluído", variant: "secondary" },
-  cancelled: { label: "Cancelado", variant: "destructive" },
-  "no-show": { label: "Não compareceu", variant: "outline" },
-};
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function formatTime(date: Date) {
-  return new Intl.DateTimeFormat("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(date));
-}
-
-function formatDate(date: Date) {
-  return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(date));
-}
-
-function startOfToday(): Date {
+function startOfMonth(): Date {
   const d = new Date();
+  d.setDate(1);
   d.setHours(0, 0, 0, 0);
   return d;
 }
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
+function endOfToday(): Date {
+  const d = new Date();
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+function formatCurrency(cents: number) {
+  return (cents / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
 
 function StatCard({
   title,
@@ -79,20 +42,17 @@ function StatCard({
   icon: Icon,
   loading,
   format,
+  trend,
 }: {
   title: string;
   value: number;
   icon: React.ElementType;
   loading: boolean;
   format?: "currency";
+  trend?: string;
 }) {
   const display =
-    format === "currency"
-      ? (value / 100).toLocaleString("pt-BR", {
-          style: "currency",
-          currency: "BRL",
-        })
-      : value;
+    format === "currency" ? formatCurrency(value) : value.toString();
 
   return (
     <Card>
@@ -102,538 +62,223 @@ function StatCard({
       </CardHeader>
       <CardContent>
         {loading ? (
-          <Skeleton className="h-8 w-16" />
+          <Skeleton className="h-8 w-24" />
         ) : (
-          <div className="text-2xl font-bold">{display}</div>
+          <>
+            <div className="text-2xl font-bold">{display}</div>
+            {trend && (
+              <p className="mt-1 text-xs text-muted-foreground">{trend}</p>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
   );
 }
 
-// ─── Dashboard Page ───────────────────────────────────────────────────────────
+const ORDER_STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+  open: { label: "Aberta", variant: "outline" },
+  in_progress: { label: "Em andamento", variant: "default" },
+  completed: { label: "Concluída", variant: "secondary" },
+  cancelled: { label: "Cancelada", variant: "destructive" },
+};
 
 export default function AdminDashboardPage() {
   const trpc = useTRPC();
+  const from = useMemo(() => startOfMonth(), []);
+  const to = useMemo(() => endOfToday(), []);
 
-  const { data: stats, isLoading: statsLoading } = useQuery(
-    trpc.admin.getDashboardStats.queryOptions(),
+  const { data: summary, isLoading: summaryLoading } = useQuery(
+    trpc.financial.summary.queryOptions({ from, to }),
   );
 
-  const { data: activeMember } = useQuery({
-    queryKey: ["active-member-dashboard"],
-    queryFn: async () => {
-      const result = await authClient.organization.getActiveMember();
-      return result.data;
-    },
-  });
-
-  const { data: orgData } = useQuery({
-    queryKey: ["org-members-dashboard"],
-    queryFn: async () => {
-      const result = await authClient.organization.getFullOrganization();
-      return result.data;
-    },
-  });
-
-  const isAdmin = ORG_ADMIN_ROLES.includes(activeMember?.role ?? "");
-
-  const barbers =
-    orgData?.members?.filter(
-      (m) => m.role === "barber" || m.role === "owner",
-    ) ?? [];
-
-  const [selectedBarberId, setSelectedBarberId] = useState<string>("all");
-
-  const filterBarberId =
-    isAdmin && selectedBarberId !== "all" ? selectedBarberId : undefined;
-
-  const { data: appointments, isLoading: aptsLoading } = useQuery(
-    trpc.admin.listAppointments.queryOptions({
-      from: startOfToday(),
-      barberId: filterBarberId,
-    }),
+  const { data: clientsData, isLoading: clientsLoading } = useQuery(
+    trpc.client.list.queryOptions({ pageSize: 5 }),
   );
 
-  const queryClient = useQueryClient();
-  const invalidate = () =>
-    queryClient.invalidateQueries({
-      queryKey: trpc.admin.listAppointments.queryKey(),
-    });
-
-  const confirmSqueeze = useMutation(
-    trpc.scheduling.confirmSqueezeIn.mutationOptions({ onSuccess: invalidate }),
-  );
-  const rejectSqueeze = useMutation(
-    trpc.scheduling.rejectSqueezeIn.mutationOptions({ onSuccess: invalidate }),
-  );
-  const updateStatus = useMutation(
-    trpc.scheduling.updateAppointmentStatus.mutationOptions({
-      onSuccess: invalidate,
-    }),
-  );
-  const markAsWaiting = useMutation(
-    trpc.scheduling.markAsWaiting.mutationOptions({ onSuccess: invalidate }),
-  );
-  const markAsInService = useMutation(
-    trpc.scheduling.markAsInService.mutationOptions({ onSuccess: invalidate }),
+  const { data: ordersData, isLoading: ordersLoading } = useQuery(
+    trpc.serviceOrder.list.queryOptions({ pageSize: 5 }),
   );
 
-  // Group appointments by barber
-  const grouped = new Map<
-    string,
-    { barberName: string; appointments: NonNullable<typeof appointments> }
-  >();
-
-  for (const apt of appointments ?? []) {
-    if (!grouped.has(apt.barberId)) {
-      grouped.set(apt.barberId, {
-        barberName: apt.barberName,
-        appointments: [],
-      });
-    }
-    grouped.get(apt.barberId)!.appointments.push(apt);
-  }
-
-  const barberGroups = Array.from(grouped.values());
-  const showGrouped = isAdmin && selectedBarberId === "all";
+  const { data: topServices, isLoading: topLoading } = useQuery(
+    trpc.financial.topServices.queryOptions({ from, to, limit: 5 }),
+  );
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">Visão geral da sua barbearia</p>
+        <p className="text-muted-foreground">
+          Resumo do mês — {new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+        </p>
       </div>
 
-      {/* Stat cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      {/* Summary cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Agendamentos Hoje"
-          value={stats?.todayAppointments ?? 0}
-          icon={CalendarDays}
-          loading={statsLoading}
+          title="Receita no Mês"
+          value={summary?.revenueInCents ?? 0}
+          icon={DollarSign}
+          loading={summaryLoading}
+          format="currency"
         />
         <StatCard
-          title="Total de Agendamentos"
-          value={stats?.totalAppointments ?? 0}
-          icon={CalendarDays}
-          loading={statsLoading}
-        />
-        <StatCard
-          title="Clientes"
-          value={stats?.totalCustomers ?? 0}
-          icon={Users}
-          loading={statsLoading}
-        />
-        <StatCard
-          title="Serviços Ativos"
-          value={stats?.totalServices ?? 0}
-          icon={Scissors}
-          loading={statsLoading}
+          title="Ordens Concluídas"
+          value={summary?.ordersCompleted ?? 0}
+          icon={ClipboardList}
+          loading={summaryLoading}
+          trend="no mês atual"
         />
         <StatCard
           title="Ticket Médio"
-          value={stats?.averageTicketInCents ?? 0}
-          icon={DollarSign}
-          loading={statsLoading}
+          value={summary?.averageOrderValueInCents ?? 0}
+          icon={TrendingUp}
+          loading={summaryLoading}
           format="currency"
+        />
+        <StatCard
+          title="Total de Clientes"
+          value={clientsData?.total ?? 0}
+          icon={Users}
+          loading={clientsLoading}
         />
       </div>
 
-      {/* Appointments section */}
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">
-              Agendamentos a partir de hoje
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {aptsLoading
-                ? "…"
-                : `${appointments?.length ?? 0} agendamento${(appointments?.length ?? 0) !== 1 ? "s" : ""}`}
-            </p>
-          </div>
-
-          {isAdmin && barbers.length > 1 && (
-            <Select
-              value={selectedBarberId}
-              onValueChange={(v) => setSelectedBarberId(v ?? "all")}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Filtrar profissional">
-                  {selectedBarberId === "all"
-                    ? "Todos os profissionais"
-                    : (barbers.find((b) => b.userId === selectedBarberId)?.user
-                        .name ?? selectedBarberId)}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os profissionais</SelectItem>
-                {barbers.map((b) => (
-                  <SelectItem key={b.userId} value={b.userId}>
-                    {b.user.name}
-                  </SelectItem>
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Recent orders */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Ordens Recentes</CardTitle>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/admin/ordens">
+                Ver todas <ArrowRight className="ml-1 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {ordersLoading ? (
+              <div className="space-y-3">
+                {[...Array(4)].map((_, i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
                 ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-
-        {aptsLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-20 w-full rounded-xl" />
-            ))}
-          </div>
-        ) : !appointments?.length ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-center">
-            <CalendarDays className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-            <p className="text-muted-foreground">Nenhum agendamento futuro</p>
-          </div>
-        ) : showGrouped ? (
-          /* Owner view: grouped by barber */
-          <div className="space-y-5">
-            {barberGroups.map(({ barberName, appointments: apts }) => (
-              <div key={barberName} className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-primary" />
-                  <span className="font-medium">{barberName}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {apts.length} agendamento{apts.length !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  {apts.map((apt) => (
-                    <AppointmentRow
-                      key={apt.id}
-                      apt={apt}
-                      onConfirm={() =>
-                        confirmSqueeze.mutate({ appointmentId: apt.id })
-                      }
-                      onReject={() =>
-                        rejectSqueeze.mutate({ appointmentId: apt.id })
-                      }
-                      onUpdateStatus={(status) =>
-                        updateStatus.mutate({ appointmentId: apt.id, status })
-                      }
-                      onMarkAsWaiting={() =>
-                        markAsWaiting.mutate({ appointmentId: apt.id })
-                      }
-                      onMarkAsInService={() =>
-                        markAsInService.mutate({ appointmentId: apt.id })
-                      }
-                      isPending={
-                        confirmSqueeze.isPending ||
-                        rejectSqueeze.isPending ||
-                        updateStatus.isPending ||
-                        markAsWaiting.isPending ||
-                        markAsInService.isPending
-                      }
-                    />
-                  ))}
-                </div>
               </div>
-            ))}
-          </div>
-        ) : (
-          /* Barber view or filtered by one barber */
-          <div className="space-y-2">
-            {appointments.map((apt) => (
-              <AppointmentRow
-                key={apt.id}
-                apt={apt}
-                onConfirm={() =>
-                  confirmSqueeze.mutate({ appointmentId: apt.id })
-                }
-                onReject={() => rejectSqueeze.mutate({ appointmentId: apt.id })}
-                onUpdateStatus={(status) =>
-                  updateStatus.mutate({ appointmentId: apt.id, status })
-                }
-                onMarkAsWaiting={() =>
-                  markAsWaiting.mutate({ appointmentId: apt.id })
-                }
-                onMarkAsInService={() =>
-                  markAsInService.mutate({ appointmentId: apt.id })
-                }
-                isPending={
-                  confirmSqueeze.isPending ||
-                  rejectSqueeze.isPending ||
-                  updateStatus.isPending ||
-                  markAsWaiting.isPending ||
-                  markAsInService.isPending
-                }
-              />
-            ))}
-          </div>
-        )}
+            ) : !ordersData?.data.length ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                Nenhuma ordem de serviço ainda
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {ordersData.data.map((order) => {
+                  const statusInfo = ORDER_STATUS_LABELS[order.status] ?? {
+                    label: order.status,
+                    variant: "outline" as const,
+                  };
+                  return (
+                    <Link
+                      key={order.id}
+                      href={`/admin/ordens/${order.id}`}
+                      className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted/50"
+                    >
+                      <div>
+                        <span className="text-sm font-medium">
+                          OS #{order.number}
+                        </span>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(order.createdAt).toLocaleDateString("pt-BR")}
+                        </p>
+                      </div>
+                      <Badge variant={statusInfo.variant}>
+                        {statusInfo.label}
+                      </Badge>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Top services */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Top Serviços</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {topLoading ? (
+              <div className="space-y-3">
+                {[...Array(4)].map((_, i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
+                ))}
+              </div>
+            ) : !topServices?.length ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                Nenhum dado disponível
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {topServices.map((s, i) => (
+                  <div key={s.name} className="flex items-center gap-3">
+                    <span className="w-5 text-sm font-medium text-muted-foreground">
+                      {i + 1}.
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate text-sm font-medium">{s.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {s.count}x · {formatCurrency(s.revenueInCents)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Recent clients */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Clientes Recentes</CardTitle>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/admin/clientes">
+              Ver todos <ArrowRight className="ml-1 h-4 w-4" />
+            </Link>
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {clientsLoading ? (
+            <div className="space-y-3">
+              {[...Array(4)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : !clientsData?.data.length ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              Nenhum cliente cadastrado ainda
+            </div>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {clientsData.data.map((c) => (
+                <Link
+                  key={c.id}
+                  href={`/admin/clientes/${c.id}`}
+                  className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                    {c.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{c.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {c.phone ?? c.email ?? "—"}
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
-  );
-}
-
-// ─── Appointment Row ──────────────────────────────────────────────────────────
-
-type Apt = {
-  id: string;
-  startsAt: Date;
-  endsAt: Date;
-  status: string;
-  type: string;
-  customerName: string;
-  customerPhone: string;
-  serviceName: string;
-  barberName: string;
-};
-
-type PendingAction =
-  | "confirm"
-  | "reject"
-  | "waiting"
-  | "in_service"
-  | "completed"
-  | "cancelled"
-  | "no-show"
-  | null;
-
-const ACTION_LABELS: Record<
-  NonNullable<PendingAction>,
-  { title: string; description: string; confirmLabel: string; variant?: "destructive" }
-> = {
-  confirm: {
-    title: "Confirmar encaixe",
-    description: "Deseja confirmar este encaixe?",
-    confirmLabel: "Confirmar",
-  },
-  reject: {
-    title: "Recusar encaixe",
-    description: "Deseja recusar este encaixe? O cliente será notificado.",
-    confirmLabel: "Recusar",
-    variant: "destructive",
-  },
-  waiting: {
-    title: "Cliente chegou",
-    description: "Registrar chegada do cliente e colocar na fila de espera?",
-    confirmLabel: "Confirmar chegada",
-  },
-  in_service: {
-    title: "Iniciar atendimento",
-    description: "Deseja colocar este cliente em atendimento?",
-    confirmLabel: "Iniciar",
-  },
-  completed: {
-    title: "Marcar como concluído",
-    description: "Deseja marcar este agendamento como concluído?",
-    confirmLabel: "Concluído",
-  },
-  "no-show": {
-    title: "Marcar como não compareceu",
-    description: "Deseja marcar que o cliente não compareceu?",
-    confirmLabel: "Confirmar",
-    variant: "destructive",
-  },
-  cancelled: {
-    title: "Cancelar agendamento",
-    description: "Deseja cancelar este agendamento?",
-    confirmLabel: "Cancelar",
-    variant: "destructive",
-  },
-};
-
-function AppointmentRow({
-  apt,
-  onConfirm,
-  onReject,
-  onUpdateStatus,
-  onMarkAsWaiting,
-  onMarkAsInService,
-  isPending,
-}: {
-  apt: Apt;
-  onConfirm: () => void;
-  onReject: () => void;
-  onUpdateStatus: (status: "completed" | "cancelled" | "no-show") => void;
-  onMarkAsWaiting: () => void;
-  onMarkAsInService: () => void;
-  isPending: boolean;
-}) {
-  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
-
-  const status = STATUS_MAP[apt.status] ?? {
-    label: apt.status,
-    variant: "outline" as const,
-  };
-  const isPendingSqueeze =
-    apt.type === "squeeze_in" && apt.status === "pending_confirmation";
-
-  function handleConfirm() {
-    if (!pendingAction) return;
-    if (pendingAction === "confirm") onConfirm();
-    else if (pendingAction === "reject") onReject();
-    else if (pendingAction === "waiting") onMarkAsWaiting();
-    else if (pendingAction === "in_service") onMarkAsInService();
-    else onUpdateStatus(pendingAction);
-    setPendingAction(null);
-  }
-
-  const actionInfo = pendingAction ? ACTION_LABELS[pendingAction] : null;
-
-  return (
-    <>
-      <AlertDialog open={!!pendingAction} onOpenChange={(open) => { if (!open) setPendingAction(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{actionInfo?.title}</AlertDialogTitle>
-            <AlertDialogDescription>{actionInfo?.description}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Voltar</AlertDialogCancel>
-            <AlertDialogAction
-              variant={actionInfo?.variant ?? "default"}
-              onClick={handleConfirm}
-            >
-              {actionInfo?.confirmLabel}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <div className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="flex flex-col items-center rounded-lg bg-muted px-3 py-2 text-center">
-            <span className="text-xs text-muted-foreground">
-              {formatDate(apt.startsAt)}
-            </span>
-            <span className="text-base font-bold tabular-nums">
-              {formatTime(apt.startsAt)}
-            </span>
-          </div>
-          <div>
-            <div className="font-medium">{apt.customerName}</div>
-            <div className="text-sm text-muted-foreground">{apt.serviceName}</div>
-            <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Clock className="h-3 w-3" />
-              {formatTime(apt.startsAt)} – {formatTime(apt.endsAt)}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Badge variant={status.variant}>{status.label}</Badge>
-
-          {isPendingSqueeze ? (
-            <div className="flex gap-1">
-              <Button size="sm" onClick={() => setPendingAction("confirm")} disabled={isPending}>
-                <Check className="mr-1 h-3.5 w-3.5" />
-                Confirmar
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => setPendingAction("reject")}
-                disabled={isPending}
-              >
-                <X className="mr-1 h-3.5 w-3.5" />
-                Recusar
-              </Button>
-            </div>
-          ) : apt.status === "scheduled" ? (
-            <div className="flex flex-wrap gap-1">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setPendingAction("waiting")}
-                disabled={isPending}
-              >
-                Cliente chegou
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setPendingAction("completed")}
-                disabled={isPending}
-              >
-                <Check className="mr-1 h-3.5 w-3.5" />
-                Concluído
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setPendingAction("no-show")}
-                disabled={isPending}
-              >
-                Não compareceu
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => setPendingAction("cancelled")}
-                disabled={isPending}
-              >
-                <X className="mr-1 h-3.5 w-3.5" />
-                Cancelar
-              </Button>
-            </div>
-          ) : apt.status === "waiting" ? (
-            <div className="flex flex-wrap gap-1">
-              <Button
-                size="sm"
-                onClick={() => setPendingAction("in_service")}
-                disabled={isPending}
-              >
-                <Scissors className="mr-1 h-3.5 w-3.5" />
-                Em atendimento
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setPendingAction("completed")}
-                disabled={isPending}
-              >
-                <Check className="mr-1 h-3.5 w-3.5" />
-                Concluído
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setPendingAction("no-show")}
-                disabled={isPending}
-              >
-                Não compareceu
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => setPendingAction("cancelled")}
-                disabled={isPending}
-              >
-                <X className="mr-1 h-3.5 w-3.5" />
-                Cancelar
-              </Button>
-            </div>
-          ) : apt.status === "in_service" ? (
-            <div className="flex flex-wrap gap-1">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setPendingAction("completed")}
-                disabled={isPending}
-              >
-                <Check className="mr-1 h-3.5 w-3.5" />
-                Concluído
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => setPendingAction("cancelled")}
-                disabled={isPending}
-              >
-                <X className="mr-1 h-3.5 w-3.5" />
-                Cancelar
-              </Button>
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </>
   );
 }

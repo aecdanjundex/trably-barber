@@ -15,8 +15,7 @@ export const authClient = createAuthClient({
       roles: {
         owner: ownerAc,
         admin: adminAc,
-        member: memberAc,
-        barber: memberAc,
+        staff: memberAc,
       },
     }),
   ],
