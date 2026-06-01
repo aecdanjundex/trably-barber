@@ -1,274 +1,150 @@
 import { z } from "zod";
-import {
-  createTRPCRouter,
-  orgAdminProcedure,
-  orgProcedure,
-  premiumOrgProcedure,
-  premiumOrgAdminProcedure,
-} from "@/trpc/init";
+import { createTRPCRouter, orgProcedure, orgAdminProcedure } from "../init";
 import { container } from "@/lib/di/container";
 import { TYPES } from "@/lib/di/types";
 import type { IServiceOrderService } from "@/domains/service-order/interfaces/service-order.service.interface";
-import {
-  createProductSchema,
-  updateProductSchema,
-  createPaymentMethodSchema,
-  updatePaymentMethodSchema,
-  upsertCommissionConfigSchema,
-  createServiceOrderSchema,
-  updateServiceOrderSchema,
-  addServiceOrderItemSchema,
-  updateServiceOrderItemSchema,
-  addPaymentSchema,
-  createQuickItemSchema,
-  updateQuickItemSchema,
-  reportDateRangeSchema,
-  generateCommissionPaymentSchema,
-  updateCommissionPaymentStatusSchema,
-} from "@/domains/service-order/schemas/service-order.schema";
-import { ORG_ROLES } from "@/lib/permissions";
-import { TRPCError } from "@trpc/server";
+import { db } from "@/lib/db";
+import { service, product, paymentMethod } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 
-const getService = () =>
+const orderService = () =>
   container.get<IServiceOrderService>(TYPES.ServiceOrderService);
 
 export const serviceOrderRouter = createTRPCRouter({
-  // ─── Products ──────────────────────────────────────────────────────────────
-  listProducts: orgAdminProcedure.query(({ ctx }) =>
-    getService().listProducts(ctx.orgId),
-  ),
-
-  createProduct: orgAdminProcedure
-    .input(createProductSchema)
-    .mutation(({ ctx, input }) => getService().createProduct(ctx.orgId, input)),
-
-  updateProduct: orgAdminProcedure
-    .input(updateProductSchema)
-    .mutation(({ ctx, input }) => getService().updateProduct(ctx.orgId, input)),
-
-  deleteProduct: orgAdminProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(({ ctx, input }) =>
-      getService().deleteProduct(ctx.orgId, input.id),
-    ),
-
-  // ─── Payment Methods ───────────────────────────────────────────────────────
-  listPaymentMethods: orgAdminProcedure.query(({ ctx }) =>
-    getService().listPaymentMethods(ctx.orgId),
-  ),
-
-  createPaymentMethod: orgAdminProcedure
-    .input(createPaymentMethodSchema)
-    .mutation(({ ctx, input }) =>
-      getService().createPaymentMethod(ctx.orgId, input),
-    ),
-
-  updatePaymentMethod: orgAdminProcedure
-    .input(updatePaymentMethodSchema)
-    .mutation(({ ctx, input }) =>
-      getService().updatePaymentMethod(ctx.orgId, input),
-    ),
-
-  deletePaymentMethod: orgAdminProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(({ ctx, input }) =>
-      getService().deletePaymentMethod(ctx.orgId, input.id),
-    ),
-
-  // ─── Commission Config ─────────────────────────────────────────────────────
-  listCommissionConfigs: premiumOrgAdminProcedure.query(({ ctx }) =>
-    getService().listCommissionConfigs(ctx.orgId),
-  ),
-
-  upsertCommissionConfig: premiumOrgAdminProcedure
-    .input(upsertCommissionConfigSchema)
-    .mutation(({ ctx, input }) =>
-      getService().upsertCommissionConfig(ctx.orgId, input),
-    ),
-
-  deleteCommissionConfig: premiumOrgAdminProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(({ ctx, input }) =>
-      getService().deleteCommissionConfig(ctx.orgId, input.id),
-    ),
-
-  // ─── Service Orders ────────────────────────────────────────────────────────
-  listServiceOrders: orgAdminProcedure
+  list: orgProcedure
     .input(
-      z
-        .object({
-          status: z.string().optional(),
-          customerId: z.string().optional(),
-          from: z.date().optional(),
-          to: z.date().optional(),
-        })
-        .optional(),
+      z.object({
+        status: z
+          .enum(["open", "in_progress", "completed", "cancelled"])
+          .optional(),
+        clientId: z.string().optional(),
+        search: z.string().optional(),
+        page: z.number().int().positive().default(1),
+        pageSize: z.number().int().positive().max(100).default(20),
+      }),
     )
     .query(({ ctx, input }) =>
-      getService().listServiceOrders(ctx.orgId, input ?? undefined),
+      orderService().list({ organizationId: ctx.orgId, ...input }),
     ),
 
-  getServiceOrder: orgAdminProcedure
+  getById: orgProcedure
     .input(z.object({ id: z.string() }))
-    .query(({ ctx, input }) =>
-      getService().getServiceOrder(ctx.orgId, input.id),
-    ),
+    .query(({ ctx, input }) => orderService().getById(input.id, ctx.orgId)),
 
-  createServiceOrder: orgAdminProcedure
-    .input(createServiceOrderSchema)
-    .mutation(({ ctx, input }) =>
-      getService().createServiceOrder(ctx.orgId, input),
-    ),
-
-  updateServiceOrder: orgAdminProcedure
-    .input(updateServiceOrderSchema)
-    .mutation(({ ctx, input }) =>
-      getService().updateServiceOrder(ctx.orgId, input),
-    ),
-
-  // ─── Service Order Items ───────────────────────────────────────────────────
-  addServiceOrderItem: orgAdminProcedure
-    .input(addServiceOrderItemSchema)
-    .mutation(({ ctx, input }) =>
-      getService().addServiceOrderItem(ctx.orgId, input),
-    ),
-
-  updateServiceOrderItem: orgAdminProcedure
-    .input(updateServiceOrderItemSchema)
-    .mutation(({ input }) => getService().updateServiceOrderItem(input)),
-
-  removeServiceOrderItem: orgAdminProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(({ input }) => getService().removeServiceOrderItem(input.id)),
-
-  // ─── Payments ──────────────────────────────────────────────────────────────
-  addPayment: orgAdminProcedure
-    .input(addPaymentSchema)
-    .mutation(({ input }) => getService().addPayment(input)),
-
-  removePayment: orgAdminProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(({ input }) => getService().removePayment(input.id)),
-
-  listPaymentsByDateRange: orgAdminProcedure
-    .input(z.object({ from: z.date(), to: z.date() }))
-    .query(({ ctx, input }) =>
-      getService().listPaymentsByDateRange(ctx.orgId, input.from, input.to),
-    ),
-
-  // ─── Quick Items ───────────────────────────────────────────────────────────
-  listQuickItems: orgAdminProcedure.query(({ ctx }) =>
-    getService().listQuickItems(ctx.orgId),
-  ),
-
-  createQuickItem: orgAdminProcedure
-    .input(createQuickItemSchema)
-    .mutation(({ ctx, input }) =>
-      getService().createQuickItem(ctx.orgId, input),
-    ),
-
-  updateQuickItem: orgAdminProcedure
-    .input(updateQuickItemSchema)
-    .mutation(({ ctx, input }) =>
-      getService().updateQuickItem(ctx.orgId, input),
-    ),
-
-  deleteQuickItem: orgAdminProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(({ ctx, input }) =>
-      getService().deleteQuickItem(ctx.orgId, input.id),
-    ),
-
-  // ─── Reports ───────────────────────────────────────────────────────────────
-  reportTotalInvoiced: orgAdminProcedure
-    .input(reportDateRangeSchema)
-    .query(({ ctx, input }) =>
-      getService().getReportTotalInvoiced(ctx.orgId, input.from, input.to),
-    ),
-
-  reportAverageTicket: orgAdminProcedure
-    .input(reportDateRangeSchema)
-    .query(({ ctx, input }) =>
-      getService().getReportAverageTicket(ctx.orgId, input.from, input.to),
-    ),
-
-  reportByPaymentMethod: orgAdminProcedure
-    .input(reportDateRangeSchema)
-    .query(({ ctx, input }) =>
-      getService().getReportByPaymentMethod(ctx.orgId, input.from, input.to),
-    ),
-
-  reportByProfessional: orgAdminProcedure
-    .input(reportDateRangeSchema)
-    .query(({ ctx, input }) =>
-      getService().getReportByProfessional(ctx.orgId, input.from, input.to),
-    ),
-
-  reportByProduct: orgAdminProcedure
-    .input(reportDateRangeSchema)
-    .query(({ ctx, input }) =>
-      getService().getReportByProduct(ctx.orgId, input.from, input.to),
-    ),
-
-  reportByService: orgAdminProcedure
-    .input(reportDateRangeSchema)
-    .query(({ ctx, input }) =>
-      getService().getReportByService(ctx.orgId, input.from, input.to),
-    ),
-
-  // ─── Commission Payments ───────────────────────────────────────────────────
-  listCommissionPayments: premiumOrgProcedure
+  create: orgProcedure
     .input(
-      z
-        .object({
-          professionalId: z.string().optional(),
-          status: z.string().optional(),
-        })
-        .optional(),
+      z.object({
+        clientId: z.string().optional().nullable(),
+        assignedToId: z.string().optional().nullable(),
+        dueDate: z.date().optional().nullable(),
+        notes: z.string().optional().nullable(),
+        discountInCents: z.number().int().min(0).default(0),
+        items: z
+          .array(
+            z.object({
+              itemType: z.enum(["service", "product"]),
+              referenceId: z.string().optional().nullable(),
+              name: z.string().min(1),
+              quantity: z.number().int().positive(),
+              unitPriceInCents: z.number().int().min(0),
+              notes: z.string().optional().nullable(),
+            }),
+          )
+          .default([]),
+      }),
     )
-    .query(({ ctx, input }) => {
-      const professionalId =
-        ctx.memberRole === ORG_ROLES.BARBER
-          ? ctx.user.id
-          : input?.professionalId;
-      return getService().listCommissionPayments(ctx.orgId, {
-        ...input,
-        professionalId,
-      });
-    }),
-
-  getCommissionPayment: premiumOrgProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const payment = await getService().getCommissionPayment(
-        ctx.orgId,
-        input.id,
-      );
-      if (
-        ctx.memberRole === ORG_ROLES.BARBER &&
-        payment?.professionalId !== ctx.user.id
-      ) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Acesso negado",
-        });
-      }
-      return payment;
-    }),
-
-  generateCommissionPayment: premiumOrgAdminProcedure
-    .input(generateCommissionPaymentSchema)
     .mutation(({ ctx, input }) =>
-      getService().generateCommissionPayment(ctx.orgId, input),
+      orderService().create({ organizationId: ctx.orgId, ...input }),
     ),
 
-  updateCommissionPaymentStatus: premiumOrgAdminProcedure
-    .input(updateCommissionPaymentStatusSchema)
+  update: orgProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        clientId: z.string().optional().nullable(),
+        assignedToId: z.string().optional().nullable(),
+        status: z
+          .enum(["open", "in_progress", "completed", "cancelled"])
+          .optional(),
+        discountInCents: z.number().int().min(0).optional(),
+        dueDate: z.date().optional().nullable(),
+        notes: z.string().optional().nullable(),
+      }),
+    )
+    .mutation(({ ctx, input }) => {
+      const { id, ...data } = input;
+      return orderService().update(id, ctx.orgId, data);
+    }),
+
+  delete: orgAdminProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(({ ctx, input }) => orderService().delete(input.id, ctx.orgId)),
+
+  addItem: orgProcedure
+    .input(
+      z.object({
+        serviceOrderId: z.string(),
+        itemType: z.enum(["service", "product"]),
+        referenceId: z.string().optional().nullable(),
+        name: z.string().min(1),
+        quantity: z.number().int().positive(),
+        unitPriceInCents: z.number().int().min(0),
+        notes: z.string().optional().nullable(),
+      }),
+    )
+    .mutation(({ input }) => orderService().addItem(input)),
+
+  removeItem: orgProcedure
+    .input(z.object({ itemId: z.string(), serviceOrderId: z.string() }))
     .mutation(({ ctx, input }) =>
-      getService().updateCommissionPaymentStatus(
+      orderService().removeItem(input.itemId, input.serviceOrderId, ctx.orgId),
+    ),
+
+  addPayment: orgProcedure
+    .input(
+      z.object({
+        serviceOrderId: z.string(),
+        paymentMethodId: z.string(),
+        amountInCents: z.number().int().positive(),
+        paidAt: z.date().optional(),
+        notes: z.string().optional().nullable(),
+      }),
+    )
+    .mutation(({ input }) => orderService().addPayment(input)),
+
+  removePayment: orgProcedure
+    .input(z.object({ paymentId: z.string(), serviceOrderId: z.string() }))
+    .mutation(({ ctx, input }) =>
+      orderService().removePayment(
+        input.paymentId,
+        input.serviceOrderId,
         ctx.orgId,
-        input.id,
-        input.status,
       ),
     ),
+
+  listServices: orgProcedure.query(({ ctx }) =>
+    db
+      .select()
+      .from(service)
+      .where(and(eq(service.organizationId, ctx.orgId), eq(service.active, true))),
+  ),
+
+  listProducts: orgProcedure.query(({ ctx }) =>
+    db
+      .select()
+      .from(product)
+      .where(and(eq(product.organizationId, ctx.orgId), eq(product.active, true))),
+  ),
+
+  listPaymentMethods: orgProcedure.query(({ ctx }) =>
+    db
+      .select()
+      .from(paymentMethod)
+      .where(
+        and(
+          eq(paymentMethod.organizationId, ctx.orgId),
+          eq(paymentMethod.active, true),
+        ),
+      ),
+  ),
 });

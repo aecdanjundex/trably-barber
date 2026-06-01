@@ -1,122 +1,101 @@
-import type {
-  product,
-  paymentMethod,
-  commissionConfig,
-  serviceOrder,
-  serviceOrderItem,
-  serviceOrderItemProfessional,
-  serviceOrderPayment,
-  quickItem,
-  commissionPayment,
-  commissionPaymentItem,
-  customer,
-  user,
-} from "@/db/schema";
+export type OrderStatus = "open" | "in_progress" | "completed" | "cancelled";
+export type OrderItemType = "service" | "product";
 
-export type Product = typeof product.$inferSelect;
-export type ProductInsert = typeof product.$inferInsert;
+export interface ServiceOrder {
+  id: string;
+  organizationId: string;
+  number: number;
+  clientId: string | null;
+  assignedToId: string | null;
+  status: OrderStatus;
+  discountInCents: number;
+  dueDate: Date | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
-export type PaymentMethod = typeof paymentMethod.$inferSelect;
-export type PaymentMethodInsert = typeof paymentMethod.$inferInsert;
+export interface ServiceOrderItem {
+  id: string;
+  serviceOrderId: string;
+  itemType: OrderItemType;
+  referenceId: string | null;
+  name: string;
+  quantity: number;
+  unitPriceInCents: number;
+  notes: string | null;
+  createdAt: Date;
+}
 
-export type CommissionConfig = typeof commissionConfig.$inferSelect;
-export type CommissionConfigInsert = typeof commissionConfig.$inferInsert;
-
-export type ServiceOrder = typeof serviceOrder.$inferSelect;
-export type ServiceOrderInsert = typeof serviceOrder.$inferInsert;
-
-export type ServiceOrderItem = typeof serviceOrderItem.$inferSelect;
-export type ServiceOrderItemInsert = typeof serviceOrderItem.$inferInsert;
-
-export type ServiceOrderItemProfessional =
-  typeof serviceOrderItemProfessional.$inferSelect;
-export type ServiceOrderItemProfessionalInsert =
-  typeof serviceOrderItemProfessional.$inferInsert;
-
-export type ServiceOrderPayment = typeof serviceOrderPayment.$inferSelect;
-export type ServiceOrderPaymentInsert = typeof serviceOrderPayment.$inferInsert;
-
-export type QuickItem = typeof quickItem.$inferSelect;
-export type QuickItemInsert = typeof quickItem.$inferInsert;
-
-export type Customer = typeof customer.$inferSelect;
-export type User = typeof user.$inferSelect;
-
-/** Enriched service order with items, payments, and customer info */
-export type EnrichedServiceOrder = ServiceOrder & {
-  customerName: string | null;
-  customerPhone: string | null;
-  items: EnrichedServiceOrderItem[];
-  payments: EnrichedServiceOrderPayment[];
-  totalInCents: number;
-  totalPaidInCents: number;
-};
-
-export type EnrichedServiceOrderItem = ServiceOrderItem & {
-  professionals: (ServiceOrderItemProfessional & {
-    professionalName: string;
-  })[];
-};
-
-export type EnrichedServiceOrderPayment = ServiceOrderPayment & {
-  paymentMethodName: string;
-};
-
-export type EnrichedQuickItem = QuickItem & {
-  referenceName: string;
-  referencePriceInCents: number;
-};
-
-export type CommissionConfigWithNames = CommissionConfig & {
-  professionalName: string;
-  referenceName: string;
-};
-
-// ─── Commission Payment types ────────────────────────────────────────────────
-
-export type CommissionPayment = typeof commissionPayment.$inferSelect;
-export type CommissionPaymentInsert = typeof commissionPayment.$inferInsert;
-
-export type CommissionPaymentItem = typeof commissionPaymentItem.$inferSelect;
-export type CommissionPaymentItemInsert =
-  typeof commissionPaymentItem.$inferInsert;
-
-export type EnrichedCommissionPayment = CommissionPayment & {
-  professionalName: string;
-  items: CommissionPaymentItem[];
-};
-
-// ─── Report types ────────────────────────────────────────────────────────────
-
-export type ReportTotalInvoiced = {
-  totalInCents: number;
-};
-
-export type ReportByPaymentMethod = {
+export interface ServiceOrderPayment {
+  id: string;
+  serviceOrderId: string;
   paymentMethodId: string;
-  paymentMethodName: string;
-  totalInCents: number;
-};
+  amountInCents: number;
+  paidAt: Date;
+  notes: string | null;
+  createdAt: Date;
+}
 
-export type ReportByProfessional = {
-  professionalId: string;
-  professionalName: string;
+export interface ServiceOrderDetail extends ServiceOrder {
+  clientName: string | null;
+  assignedToName: string | null;
+  items: ServiceOrderItem[];
+  payments: (ServiceOrderPayment & { paymentMethodName: string })[];
   totalInCents: number;
-};
+  paidInCents: number;
+  balanceInCents: number;
+}
 
-export type ReportByProduct = {
-  referenceId: string | null;
+export interface CreateOrderInput {
+  organizationId: string;
+  clientId?: string | null;
+  assignedToId?: string | null;
+  dueDate?: Date | null;
+  notes?: string | null;
+  discountInCents?: number;
+  items: {
+    itemType: OrderItemType;
+    referenceId?: string | null;
+    name: string;
+    quantity: number;
+    unitPriceInCents: number;
+    notes?: string | null;
+  }[];
+}
+
+export interface UpdateOrderInput {
+  clientId?: string | null;
+  assignedToId?: string | null;
+  status?: OrderStatus;
+  discountInCents?: number;
+  dueDate?: Date | null;
+  notes?: string | null;
+}
+
+export interface AddOrderItemInput {
+  serviceOrderId: string;
+  itemType: OrderItemType;
+  referenceId?: string | null;
   name: string;
-  totalInCents: number;
-};
+  quantity: number;
+  unitPriceInCents: number;
+  notes?: string | null;
+}
 
-export type ReportByService = {
-  referenceId: string | null;
-  name: string;
-  totalInCents: number;
-};
+export interface AddOrderPaymentInput {
+  serviceOrderId: string;
+  paymentMethodId: string;
+  amountInCents: number;
+  paidAt?: Date;
+  notes?: string | null;
+}
 
-export type ReportAverageTicket = {
-  averageTicketInCents: number;
-  completedOrders: number;
-};
+export interface ListOrdersInput {
+  organizationId: string;
+  status?: OrderStatus;
+  clientId?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}

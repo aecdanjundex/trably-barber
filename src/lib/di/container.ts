@@ -2,59 +2,34 @@ import "reflect-metadata";
 import { Container } from "inversify";
 import { TYPES } from "./types";
 import { db, type Database } from "@/lib/db";
-import { CustomerAuthRepository } from "@/domains/customer-auth/repositories/customer-auth.repository";
-import { CustomerAuthService } from "@/domains/customer-auth/services/customer-auth.service";
-import type { ICustomerAuthRepository } from "@/domains/customer-auth/interfaces/customer-auth.repository.interface";
-import type { ICustomerAuthService } from "@/domains/customer-auth/interfaces/customer-auth.service.interface";
-import { AdminRepository } from "@/domains/admin/repositories/admin.repository";
-import { AdminService } from "@/domains/admin/services/admin.service";
-import type { IAdminRepository } from "@/domains/admin/interfaces/admin.repository.interface";
-import type { IAdminService } from "@/domains/admin/interfaces/admin.service.interface";
-import { SchedulingRepository } from "@/domains/scheduling/repositories/scheduling.repository";
-import { SchedulingService } from "@/domains/scheduling/services/scheduling.service";
-import type { ISchedulingRepository } from "@/domains/scheduling/interfaces/scheduling.repository.interface";
-import type { ISchedulingService } from "@/domains/scheduling/interfaces/scheduling.service.interface";
+
+import { ClientRepository } from "@/domains/client/repositories/client.repository";
+import { ClientService } from "@/domains/client/services/client.service";
+import type { IClientRepository } from "@/domains/client/interfaces/client.repository.interface";
+import type { IClientService } from "@/domains/client/interfaces/client.service.interface";
+
 import { ServiceOrderRepository } from "@/domains/service-order/repositories/service-order.repository";
 import { ServiceOrderService } from "@/domains/service-order/services/service-order.service";
 import type { IServiceOrderRepository } from "@/domains/service-order/interfaces/service-order.repository.interface";
 import type { IServiceOrderService } from "@/domains/service-order/interfaces/service-order.service.interface";
-import { SubscriptionRepository } from "@/domains/subscription/repositories/subscription.repository";
-import { SubscriptionService } from "@/domains/subscription/services/subscription.service";
-import type { ISubscriptionRepository } from "@/domains/subscription/interfaces/subscription.repository.interface";
-import type { ISubscriptionService } from "@/domains/subscription/interfaces/subscription.service.interface";
+
+import { FinancialRepository } from "@/domains/financial/repositories/financial.repository";
+import { FinancialService } from "@/domains/financial/services/financial.service";
+import type { IFinancialRepository } from "@/domains/financial/interfaces/financial.repository.interface";
+import type { IFinancialService } from "@/domains/financial/interfaces/financial.service.interface";
 
 const container = new Container();
 
 container.bind<Database>(TYPES.Database).toConstantValue(db);
 
 container
-  .bind<ICustomerAuthRepository>(TYPES.CustomerAuthRepository)
-  .to(CustomerAuthRepository)
+  .bind<IClientRepository>(TYPES.ClientRepository)
+  .to(ClientRepository)
   .inSingletonScope();
 
 container
-  .bind<ICustomerAuthService>(TYPES.CustomerAuthService)
-  .to(CustomerAuthService)
-  .inSingletonScope();
-
-container
-  .bind<IAdminRepository>(TYPES.AdminRepository)
-  .to(AdminRepository)
-  .inSingletonScope();
-
-container
-  .bind<IAdminService>(TYPES.AdminService)
-  .to(AdminService)
-  .inSingletonScope();
-
-container
-  .bind<ISchedulingRepository>(TYPES.SchedulingRepository)
-  .to(SchedulingRepository)
-  .inSingletonScope();
-
-container
-  .bind<ISchedulingService>(TYPES.SchedulingService)
-  .to(SchedulingService)
+  .bind<IClientService>(TYPES.ClientService)
+  .to(ClientService)
   .inSingletonScope();
 
 container
@@ -68,13 +43,13 @@ container
   .inSingletonScope();
 
 container
-  .bind<ISubscriptionRepository>(TYPES.SubscriptionRepository)
-  .to(SubscriptionRepository)
+  .bind<IFinancialRepository>(TYPES.FinancialRepository)
+  .to(FinancialRepository)
   .inSingletonScope();
 
 container
-  .bind<ISubscriptionService>(TYPES.SubscriptionService)
-  .to(SubscriptionService)
+  .bind<IFinancialService>(TYPES.FinancialService)
+  .to(FinancialService)
   .inSingletonScope();
 
 export { container };

@@ -25,18 +25,17 @@ export const auth = betterAuth({
       roles: {
         owner: ownerAc,
         admin: adminAc,
-        member: memberAc,
-        barber: memberAc,
+        staff: memberAc,
       },
       async sendInvitationEmail({ email, organization, id }) {
         const baseUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
-        const inviteUrl = `${baseUrl}/admin/convite?id=${id}`;
+        const inviteUrl = `${baseUrl}/convite?id=${id}`;
 
         console.log("\n" + "=".repeat(60));
-        console.log("📧 CONVITE DE ORGANIZAÇÃO");
+        console.log("CONVITE DE ORGANIZAÇÃO");
         console.log("=".repeat(60));
         console.log(`Para: ${email}`);
-        console.log(`Barbearia: ${organization.name}`);
+        console.log(`Organização: ${organization.name}`);
         console.log(`Link: ${inviteUrl}`);
         console.log("=".repeat(60) + "\n");
       },

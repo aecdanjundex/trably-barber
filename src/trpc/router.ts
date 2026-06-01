@@ -4,24 +4,15 @@ import {
   publicProcedure,
   protectedProcedure,
   adminProcedure,
-  orgProcedure,
-  orgAdminProcedure,
   createTRPCRouter,
 } from "./init";
-import { customerAuthRouter } from "./routers/customer-auth";
-import { customerBookingRouter } from "./routers/customer-booking";
-import { adminRouter } from "./routers/admin";
-import { schedulingRouter } from "./routers/scheduling";
+import { clientRouter } from "./routers/client";
 import { serviceOrderRouter } from "./routers/service-order";
-import { subscriptionRouter } from "./routers/subscription";
+import { financialRouter } from "./routers/financial";
 import { db } from "@/lib/db";
 import { invitation, organization } from "@/db/schema";
 
 export const appRouter = createTRPCRouter({
-  hello: publicProcedure.query(async () => {
-    return "Hello from tRPC!";
-  }),
-
   getInvitationInfo: publicProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input }) => {
@@ -46,18 +37,16 @@ export const appRouter = createTRPCRouter({
       if (!row) return null;
       return row;
     }),
-  me: protectedProcedure.query(({ ctx }) => {
-    return { user: ctx.user };
-  }),
-  adminOnly: adminProcedure.query(({ ctx }) => {
-    return { message: `Admin access granted for ${ctx.user.name}` };
-  }),
-  customerAuth: customerAuthRouter,
-  customerBooking: customerBookingRouter,
-  admin: adminRouter,
-  scheduling: schedulingRouter,
+
+  me: protectedProcedure.query(({ ctx }) => ({ user: ctx.user })),
+
+  adminOnly: adminProcedure.query(({ ctx }) => ({
+    message: `Admin access granted for ${ctx.user.name}`,
+  })),
+
+  client: clientRouter,
   serviceOrder: serviceOrderRouter,
-  subscription: subscriptionRouter,
+  financial: financialRouter,
 });
 
 export type AppRouter = typeof appRouter;
