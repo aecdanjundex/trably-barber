@@ -150,8 +150,8 @@ export default function OrdensPage() {
                       {formatDate(o.createdAt)}
                     </TableCell>
                     <TableCell>
-                      {(o as { clientId: string | null }).clientId ? (
-                        <span className="text-sm">—</span>
+                      {o.clientId ? (
+                        <span className="text-sm">{(o as { clientName?: string | null }).clientName ?? "—"}</span>
                       ) : (
                         <span className="text-sm text-muted-foreground">Sem cliente</span>
                       )}

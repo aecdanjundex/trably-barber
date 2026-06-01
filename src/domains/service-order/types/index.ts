@@ -6,6 +6,7 @@ export interface ServiceOrder {
   organizationId: string;
   number: number;
   clientId: string | null;
+  clientName: string | null;
   assignedToId: string | null;
   status: OrderStatus;
   discountInCents: number;

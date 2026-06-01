@@ -45,6 +45,9 @@ export class ServiceOrderRepository implements IServiceOrderRepository {
     if (clientId) conditions.push(eq(serviceOrder.clientId, clientId));
 
     if (search) {
+      // Search by order number (if the term is numeric) OR by client name.
+      // We intentionally do NOT bail early when no clients match the term —
+      // orders without a client, or orders matched by number, must still show.
       const clientMatch = await this.db
         .select({ id: client.id })
         .from(client)
@@ -54,29 +57,63 @@ export class ServiceOrderRepository implements IServiceOrderRepository {
             ilike(client.name, `%${search}%`),
           ),
         );
-      const matchIds = clientMatch.map((c) => c.id);
-      if (matchIds.length === 0) return { data: [], total: 0 };
-      conditions.push(
-        or(...matchIds.map((id) => eq(serviceOrder.clientId, id)))!,
-      );
+      const matchingClientIds = clientMatch.map((c) => c.id);
+
+      const searchConditions = [];
+
+      // Match by order number when the search term is a plain integer
+      const numericTerm = parseInt(search, 10);
+      if (!isNaN(numericTerm) && String(numericTerm) === search.trim()) {
+        searchConditions.push(eq(serviceOrder.number, numericTerm));
+      }
+
+      // Match by client name
+      if (matchingClientIds.length > 0) {
+        searchConditions.push(
+          or(...matchingClientIds.map((id) => eq(serviceOrder.clientId, id)))!,
+        );
+      }
+
+      if (searchConditions.length === 0) {
+        // No criteria matched at all — return empty result
+        return { data: [], total: 0 };
+      }
+
+      conditions.push(or(...searchConditions)!);
     }
 
-    const [orders, countResult] = await Promise.all([
+    const whereClause = and(...conditions);
+
+    const [rows, countResult] = await Promise.all([
       this.db
-        .select()
+        .select({
+          id: serviceOrder.id,
+          organizationId: serviceOrder.organizationId,
+          number: serviceOrder.number,
+          clientId: serviceOrder.clientId,
+          clientName: client.name,
+          assignedToId: serviceOrder.assignedToId,
+          status: serviceOrder.status,
+          discountInCents: serviceOrder.discountInCents,
+          dueDate: serviceOrder.dueDate,
+          notes: serviceOrder.notes,
+          createdAt: serviceOrder.createdAt,
+          updatedAt: serviceOrder.updatedAt,
+        })
         .from(serviceOrder)
-        .where(and(...conditions))
+        .leftJoin(client, eq(serviceOrder.clientId, client.id))
+        .where(whereClause)
         .orderBy(desc(serviceOrder.createdAt))
         .limit(pageSize)
         .offset((page - 1) * pageSize),
       this.db
         .select({ count: sql<number>`count(*)` })
         .from(serviceOrder)
-        .where(and(...conditions)),
+        .where(whereClause),
     ]);
 
     return {
-      data: orders,
+      data: rows.map((r) => ({ ...r, clientName: r.clientName ?? null })),
       total: Number(countResult[0]?.count ?? 0),
     };
   }
@@ -188,7 +225,7 @@ export class ServiceOrderRepository implements IServiceOrderRepository {
       );
     }
 
-    return created;
+    return { ...created, clientName: null };
   }
 
   async update(
@@ -206,7 +243,7 @@ export class ServiceOrderRepository implements IServiceOrderRepository {
         ),
       )
       .returning();
-    return updated;
+    return { ...updated, clientName: null };
   }
 
   async delete(id: string, organizationId: string): Promise<void> {
@@ -276,10 +313,20 @@ export class ServiceOrderRepository implements IServiceOrderRepository {
   }
 
   async nextNumber(organizationId: string): Promise<number> {
-    const result = await this.db
-      .select({ max: sql<number>`coalesce(max(${serviceOrder.number}), 0)` })
-      .from(serviceOrder)
-      .where(eq(serviceOrder.organizationId, organizationId));
-    return Number(result[0]?.max ?? 0) + 1;
+    // Use FOR UPDATE to lock the scanned rows so that two concurrent requests
+    // cannot both read the same max and generate duplicate order numbers,
+    // which would violate the UNIQUE constraint and cause a 500 error.
+    const rows = await this.db.execute<{ next_number: string }>(
+      sql`
+        WITH locked AS (
+          SELECT COALESCE(MAX(number), 0) AS current_max
+          FROM service_order
+          WHERE organization_id = ${organizationId}
+          FOR UPDATE
+        )
+        SELECT current_max + 1 AS next_number FROM locked
+      `,
+    );
+    return Number(rows[0]?.next_number ?? 1);
   }
 }
